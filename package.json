@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "start:prod": "tsx server.ts",
     "dev": "tsx client/index.ts",
-    "build": "tsc",
+    "build": "npx tsc",
     "lint": "eslint . --ext .ts,.js",
     "type-check": "tsc --noEmit",
     "demo": "tsx client/examples/biodao-setup-example.ts",
@@ -43,16 +43,16 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.2",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.5"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "eslint": "^8.56.0",
     "supabase": "^1.123.4",
-    "tsx": "^4.6.2",
-    "typescript": "^5.3.3"
+    "tsx": "^4.6.2"
   },
   "engines": {
     "node": ">=18.0.0",
