@@ -62,6 +62,120 @@ export class EngagementSyncService {
   }
 
   /**
+   * Get Twitter user ID from username
+   */
+  private async getTwitterUserId(username: string): Promise<string | null> {
+    try {
+      await this.rateLimitManager.checkRateLimit();
+      const user = await this.twitterService.getUserByUsername(username);
+      this.rateLimitManager.incrementRequestCount();
+      return user ? user.id : null;
+    } catch (error) {
+      this.logger.error(`Failed to get Twitter user ID for @${username}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the last synced tweet ID for a DAO to avoid duplicates  
+   */
+  private async getLastSyncedTweetId(daoSlug: string): Promise<string | null> {
+    const tableName = `dao_${daoSlug}_tweets`;
+    
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      this.logger.error(`Failed to get last synced tweet for ${daoSlug}`, error);
+      return null;
+    }
+
+    return data && data.length > 0 && data[0] ? data[0].id : null;
+  }
+
+  /**
+   * Fetch new tweets from Twitter timeline for a DAO
+   */
+  private async fetchNewTweetsFromTimeline(dao: any): Promise<TwitterPost[]> {
+    try {
+      // Get Twitter user ID
+      const userId = await this.getTwitterUserId(dao.twitter_handle);
+      if (!userId) {
+        this.logger.warn(`Could not find Twitter user ID for @${dao.twitter_handle}`);
+        return [];
+      }
+
+      // Get last synced tweet ID to avoid duplicates
+      const lastTweetId = await this.getLastSyncedTweetId(dao.slug);
+      
+      this.logger.info(`Fetching new tweets for ${dao.name} since ${lastTweetId || 'beginning'}`);
+
+      // Fetch new tweets from timeline
+      await this.rateLimitManager.checkRateLimit();
+      const newTweets = await this.twitterService.fetchUserTweets(userId, lastTweetId || undefined);
+      this.rateLimitManager.incrementRequestCount();
+
+      this.logger.info(`Found ${newTweets.length} new tweets for ${dao.name}`);
+      return newTweets;
+
+    } catch (error) {
+      this.logger.error(`Failed to fetch new tweets for ${dao.name}`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Store new tweets in the database
+   */
+  private async storeNewTweets(daoSlug: string, tweets: TwitterPost[]): Promise<number> {
+    if (tweets.length === 0) return 0;
+
+    const tableName = `dao_${daoSlug}_tweets`;
+    let stored = 0;
+
+    for (const tweet of tweets) {
+      try {
+        const tweetData = {
+          id: tweet.id,
+          text: tweet.text,
+          created_at: tweet.created_at,
+          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
+          retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
+          reply_count: tweet.public_metrics ? tweet.public_metrics.reply_count : 0,
+          quote_count: tweet.public_metrics ? tweet.public_metrics.quote_count : 0,
+          view_count: tweet.public_metrics?.impression_count || 0,
+          author_id: tweet.author_id,
+          synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { error } = await supabase
+          .from(tableName)
+          .insert(tweetData);
+
+        if (error) {
+          // Skip if already exists (duplicate key)
+          if (error.code === '23505') {
+            this.logger.debug(`Tweet ${tweet.id} already exists, skipping`);
+          } else {
+            this.logger.error(`Failed to store tweet ${tweet.id}`, error);
+          }
+        } else {
+          stored++;
+          this.logger.debug(`Stored new tweet ${tweet.id}`);
+        }
+      } catch (error) {
+        this.logger.error(`Error storing tweet ${tweet.id}`, error);
+      }
+    }
+
+    return stored;
+  }
+
+  /**
    * Get tweets from the last N days for a specific DAO
    */
   private async getRecentTweets(daoSlug: string, days: number = 5) {
@@ -124,10 +238,10 @@ export class EngagementSyncService {
           id: tweet.id,
           text: tweet.text,
           created_at: tweet.created_at,
-          like_count: tweet.public_metrics.like_count,
-          retweet_count: tweet.public_metrics.retweet_count,
-          reply_count: tweet.public_metrics.reply_count,
-          quote_count: tweet.public_metrics.quote_count,
+          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
+          retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
+          reply_count: tweet.public_metrics ? tweet.public_metrics.reply_count : 0,
+          quote_count: tweet.public_metrics ? tweet.public_metrics.quote_count : 0,
           view_count: tweet.public_metrics?.impression_count || 0,
           author_id: tweet.author_id,
           updated_at: new Date().toISOString()
@@ -183,7 +297,17 @@ export class EngagementSyncService {
     try {
       this.logger.info(`Starting engagement sync for ${dao.name} (@${dao.twitter_handle})`);
 
-      // Get recent tweets from our database
+      // Step 1: Fetch and store new tweets from Twitter timeline
+      this.logger.info(`Fetching new tweets from timeline for ${dao.name}`);
+      const newTweets = await this.fetchNewTweetsFromTimeline(dao);
+      const newTweetsStored = await this.storeNewTweets(dao.slug, newTweets);
+      
+      stats.tweetsAdded = newTweetsStored;
+      stats.apiRequestsUsed = (stats.apiRequestsUsed || 0) + (newTweets.length > 0 ? 2 : 1); // User lookup + timeline fetch
+      
+      this.logger.info(`Stored ${newTweetsStored} new tweets for ${dao.name}`);
+
+      // Step 2: Get recent tweets from our database (including newly added ones)
       const recentTweets = await this.getRecentTweets(dao.slug, this.options.daysToLookBack);
       
       if (recentTweets.length === 0) {
@@ -191,7 +315,9 @@ export class EngagementSyncService {
         return stats;
       }
 
-      // Process tweets in batches to respect rate limits
+      this.logger.info(`Found ${recentTweets.length} recent tweets to update engagement for ${dao.name}`);
+
+      // Step 3: Process tweets in batches to respect rate limits
       const batchSize = this.options.maxRequestsPerBatch;
       const tweetIds = recentTweets.map(tweet => tweet.id);
       

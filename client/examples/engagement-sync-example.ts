@@ -3,6 +3,13 @@ import { RateLimitManager } from '../services/twitter/rateLimitManager';
 import { SyncLogger, LogLevel } from '../services/twitter/syncLogger';
 
 // Example usage of the Twitter Engagement Sync System
+// 
+// 🚀 NEW FEATURES:
+// - Automatically discovers and adds new tweets from DAO Twitter timelines
+// - Updates engagement metrics for all recent tweets (both new and existing)
+// - Respects Twitter API rate limits with intelligent batching
+// - Comprehensive logging and error handling
+//
 async function main() {
   // Configuration - replace with your actual Twitter Bearer Token
   const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
@@ -22,29 +29,35 @@ async function main() {
   console.log('🚀 Starting Twitter Engagement Sync Example');
 
   try {
-    /*
-    // Example 1: Run a single sync manually
-    console.log('\n📊 Running single engagement sync...');
+    // Example 1: Run a single sync manually (now includes new tweet discovery!)
+    console.log('\n📊 Running full engagement sync with new tweet discovery...');
     const stats = await syncService.runEngagementSync();
     
     console.log('✅ Sync completed!');
-    console.log(`📈 Stats: ${stats.totalTweetsProcessed} tweets processed, ${stats.tweetsUpdated} updated, ${stats.tweetsAdded} added`);
+    console.log(`📈 Stats: ${stats.totalTweetsProcessed} tweets processed, ${stats.tweetsUpdated} updated, ${stats.tweetsAdded} new tweets added`);
     console.log(`🔥 API Usage: ${stats.apiRequestsUsed} requests used`);
     console.log(`⏱️  Duration: ${stats.syncDuration}ms`);
     
     if (stats.errors.length > 0) {
       console.log(`❌ Errors: ${stats.errors.length}`);
       stats.errors.forEach(error => console.log(`   - ${error}`));
+    } else {
+      console.log('🎉 No errors! All DAOs synced successfully');
     }
-      */
 
     // Example 2: Check sync status
     console.log('\n📋 Current sync status:');
     const status = syncService.getSyncStatus();
     console.log('Status:', status);
 
-    //Example 3: Start automatic sync (uncomment to enable)
+    // Example 3: Start automatic sync (includes new tweet discovery)
     console.log('\n🔄 Starting automatic sync every 2 hours...');
+    console.log('💡 This will:');  
+    console.log('   1. Check each DAO\'s Twitter timeline for new tweets');
+    console.log('   2. Store any new tweets found in the database');
+    console.log('   3. Update engagement metrics for all recent tweets');
+    console.log('   4. Repeat every 2 hours automatically');
+    console.log('');
     syncService.startAutomaticSync();
     
     //Keep the process running if automatic sync is enabled
