@@ -1,0 +1,61 @@
+{
+  "name": "dao-social-tracker",
+  "version": "1.0.0",
+  "description": "DAO Social Tracker with Twitter sync service for tracking engagement data",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node dist/server.js",
+    "start:prod": "tsx server.ts",
+    "dev": "tsx client/index.ts",
+    "build": "tsc",
+    "lint": "eslint . --ext .ts,.js",
+    "type-check": "tsc --noEmit",
+    "demo": "tsx client/examples/biodao-setup-example.ts",
+    "test:dao": "tsx client/examples/dao-example.ts",
+    "test:twitter": "tsx client/examples/dao-twitter-example.ts",
+    "import:twitter": "tsx client/scripts/import-twitter-data.ts",
+    "extract:handles": "tsx client/scripts/extract-twitter-handles.ts",
+    "migrate": "tsx client/scripts/supabase-migrate.ts",
+    "migrate:all": "tsx client/scripts/show-all-migrations.ts",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "supabase:migrate": "tsx client/scripts/supabase-migrate.ts",
+    "twitter:sync": "tsx client/examples/twitter-sync-example.ts",
+    "twitter:start": "tsx client/services/twitter/index.ts",
+    "engagement:sync": "tsx client/examples/engagement-sync-example.ts",
+    "engagement:setup": "tsx client/scripts/setup-engagement-sync.ts setup",
+    "engagement:health": "tsx client/scripts/setup-engagement-sync.ts health"
+  },
+  "keywords": [
+    "dao",
+    "social-tracker",
+    "twitter",
+    "engagement",
+    "supabase",
+    "nodejs",
+    "typescript"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "supabase": "^1.123.4",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
