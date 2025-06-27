@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx server.ts",
     "start:prod": "npm run build && tsx server.ts",
+    "debug:env": "node debug-env.js",
     "dev": "tsx client/index.ts",
     "build": "npx tsc",
     "railway:build": "npm run build",

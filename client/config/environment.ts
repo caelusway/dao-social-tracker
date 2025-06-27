@@ -1,11 +1,27 @@
 import dotenv from 'dotenv';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 
-// Load environment variables
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-dotenv.config({ path: join(__dirname, '../../.env') });
+// Load environment variables (only in development)
+// In production (Railway), environment variables are already available
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    // Try to load .env file for development
+    dotenv.config();
+  } catch (error) {
+    // Ignore if .env file doesn't exist
+    console.warn('No .env file found, using system environment variables');
+  }
+}
+
+// Debug environment variables in production
+if (process.env.NODE_ENV === 'production') {
+  console.log('🔍 Environment Debug:');
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('SUPABASE_URL present:', !!process.env.SUPABASE_URL);
+  console.log('NEXT_PUBLIC_SUPABASE_URL present:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log('SUPABASE_ANON_KEY present:', !!process.env.SUPABASE_ANON_KEY);
+  console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  console.log('TWITTER_BEARER_TOKEN present:', !!process.env.TWITTER_BEARER_TOKEN);
+}
 
 // Environment configuration for the DAO social tracker
 export const ENV_CONFIG = {
