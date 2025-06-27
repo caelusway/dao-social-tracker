@@ -85,8 +85,8 @@ async function demonstrateDataRetrieval() {
       
       if (socialData.length > 0) {
         const latestPost = socialData[0];
-        console.log(`    Latest: ${latestPost.platform} - ${latestPost.content?.substring(0, 100)}...`);
-        console.log(`    Engagement: ${JSON.stringify(latestPost.engagement_metrics)}`);
+        console.log(`    Latest: ${latestPost?.platform} - ${latestPost?.content?.substring(0, 100)}...`);
+        console.log(`    Engagement: ${JSON.stringify(latestPost?.engagement_metrics)}`);
       }
 
       // Get engagement metrics

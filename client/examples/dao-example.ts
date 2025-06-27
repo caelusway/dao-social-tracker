@@ -21,13 +21,13 @@ async function testDAOService() {
     // Test getting a specific DAO
     if (daos.length > 0) {
       const firstDAO = daos[0];
-      console.log(`\n🔍 Getting DAO by slug: ${firstDAO.slug}`);
-      const daoBySlug = await daoService.getDAOBySlug(firstDAO.slug);
+      console.log(`\n🔍 Getting DAO by slug: ${firstDAO?.slug}`);
+      const daoBySlug = await daoService.getDAOBySlug(firstDAO?.slug || '');
       console.log(`  Found: ${daoBySlug?.name}`);
 
       // Test creating a table for this DAO (placeholder for now)
-      console.log(`\n📝 Creating table for ${firstDAO.slug}:`);
-      await daoService.createDAOTable(firstDAO.slug);
+      console.log(`\n📝 Creating table for ${firstDAO?.slug}:`);
+      await daoService.createDAOTable(firstDAO?.slug || '');
     }
 
     // Test creating a new DAO

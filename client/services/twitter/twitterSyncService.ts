@@ -103,9 +103,7 @@ export class TwitterSyncService {
         tweet_type: this.determineTweetType(tweet),
         hashtags: tweet.entities?.hashtags?.map((h: any) => h.tag) || [],
         mentions: tweet.entities?.mentions?.map((m: any) => m.username) || [],
-        urls: tweet.entities?.urls?.map((u: any) => u.expanded_url) || [],
-        context_annotations: tweet.context_annotations || [],
-        referenced_tweets: tweet.referenced_tweets || []
+        urls: tweet.entities?.urls?.map((u: any) => u.expanded_url) || []
       },
       posted_at: tweet.created_at
     };
@@ -221,4 +219,4 @@ export class TwitterSyncService {
       throw error;
     }
   }
-} 
+}

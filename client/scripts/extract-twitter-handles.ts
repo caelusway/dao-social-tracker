@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-async function extractTwitterHandles() {
+async function extractTwitterHandles(): Promise<Record<string, string> | undefined> {
   try {
     console.log('🔍 Extracting Twitter handles from JSON data...\n');
 
@@ -147,6 +147,7 @@ async function extractTwitterHandles() {
 
   } catch (error) {
     console.error('❌ Error extracting handles:', error);
+    return undefined;
   }
 }
 

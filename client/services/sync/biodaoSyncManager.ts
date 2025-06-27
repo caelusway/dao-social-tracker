@@ -132,7 +132,13 @@ export class BioDAOSyncManager {
           discord: false, // TODO: Add when Discord service is ready
           telegram: false, // TODO: Add when Telegram service is ready
         },
-        biodaos: []
+        biodaos: [] as Array<{
+          name: string;
+          slug: string;
+          social_accounts: number;
+          platforms: string[];
+          last_syncs: Record<string, any>;
+        }>
       };
 
       // Get sync status for each BioDAO

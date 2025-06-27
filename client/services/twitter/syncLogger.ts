@@ -305,7 +305,7 @@ export class SyncLogger {
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('dao_sync_logs')
         .delete()
         .eq('service', this.serviceName)
@@ -316,7 +316,7 @@ export class SyncLogger {
         return 0;
       }
 
-      const deletedCount = data ? (Array.isArray(data) ? data.length : 0) : 0;
+      const deletedCount = count || 0;
       this.info(`Cleaned up ${deletedCount} old log entries`);
       return deletedCount;
     } catch (error) {
