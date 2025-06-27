@@ -9,6 +9,7 @@ import { SyncLogger, LogLevel } from '../services/twitter/syncLogger';
 // - Updates engagement metrics for all recent tweets (both new and existing)
 // - Respects Twitter API rate limits with intelligent batching
 // - Comprehensive logging and error handling
+// - 15-minute API error cooldown with automatic retry
 //
 async function main() {
   // Configuration - replace with your actual Twitter Bearer Token
@@ -56,7 +57,8 @@ async function main() {
     console.log('   1. Check each DAO\'s Twitter timeline for new tweets');
     console.log('   2. Store any new tweets found in the database');
     console.log('   3. Update engagement metrics for all recent tweets');
-    console.log('   4. Repeat every 2 hours automatically');
+    console.log('   4. Handle API errors with 15-minute cooldown periods');
+    console.log('   5. Repeat every 2 hours automatically');
     console.log('');
     syncService.startAutomaticSync();
     

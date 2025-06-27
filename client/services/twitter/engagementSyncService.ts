@@ -25,6 +25,7 @@ export class EngagementSyncService {
   private logger: SyncLogger;
   private syncInterval: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
+  private lastApiErrorTime: number = 0;
 
   constructor(
     bearerToken: string,
@@ -37,6 +38,41 @@ export class EngagementSyncService {
     this.twitterService = new TwitterService(bearerToken);
     this.rateLimitManager = new RateLimitManager();
     this.logger = new SyncLogger('EngagementSync');
+  }
+
+  /**
+   * Wait for 15 minutes after API error before retrying
+   */
+  private async waitForApiErrorCooldown(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastError = now - this.lastApiErrorTime;
+    const waitTime = 15 * 60 * 1000; // 15 minutes in milliseconds
+    
+    if (timeSinceLastError < waitTime) {
+      const remainingWait = waitTime - timeSinceLastError;
+      this.logger.warn(`API error cooldown: waiting ${Math.round(remainingWait / 1000 / 60)} minutes before retry`);
+      await new Promise(resolve => setTimeout(resolve, remainingWait));
+    }
+  }
+
+  /**
+   * Handle API errors with automatic retry after 15 minutes
+   */
+  private async handleApiError(error: any, context: string): Promise<void> {
+    this.lastApiErrorTime = Date.now();
+    this.logger.error(`API error in ${context}: ${error.message || error}`, error);
+    
+    // Check if it's a rate limit or API error that should trigger cooldown
+    const errorMessage = (error.message || error.toString()).toLowerCase();
+    const shouldWait = errorMessage.includes('rate limit') || 
+                      errorMessage.includes('too many requests') ||
+                      errorMessage.includes('429') ||
+                      errorMessage.includes('service unavailable') ||
+                      errorMessage.includes('503');
+    
+    if (shouldWait) {
+      this.logger.warn('API error detected - will wait 15 minutes before next retry');
+    }
   }
 
   /**
@@ -66,12 +102,13 @@ export class EngagementSyncService {
    */
   private async getTwitterUserId(username: string): Promise<string | null> {
     try {
+      await this.waitForApiErrorCooldown();
       await this.rateLimitManager.checkRateLimit();
       const user = await this.twitterService.getUserByUsername(username);
       this.rateLimitManager.incrementRequestCount();
       return user ? user.id : null;
     } catch (error) {
-      this.logger.error(`Failed to get Twitter user ID for @${username}`, error);
+      await this.handleApiError(error, `getTwitterUserId(@${username})`);
       return null;
     }
   }
@@ -114,6 +151,7 @@ export class EngagementSyncService {
       this.logger.info(`Fetching new tweets for ${dao.name} since ${lastTweetId || 'beginning'}`);
 
       // Fetch new tweets from timeline
+      await this.waitForApiErrorCooldown();
       await this.rateLimitManager.checkRateLimit();
       const newTweets = await this.twitterService.fetchUserTweets(userId, lastTweetId || undefined);
       this.rateLimitManager.incrementRequestCount();
@@ -122,7 +160,7 @@ export class EngagementSyncService {
       return newTweets;
 
     } catch (error) {
-      this.logger.error(`Failed to fetch new tweets for ${dao.name}`, error);
+      await this.handleApiError(error, `fetchNewTweetsFromTimeline(${dao.name})`);
       return [];
     }
   }
@@ -220,15 +258,16 @@ export class EngagementSyncService {
    * Fetch latest engagement data for a batch of tweet IDs
    */
   private async fetchEngagementData(tweetIds: string[]): Promise<TwitterPost[]> {
-    await this.rateLimitManager.checkRateLimit();
-    
     try {
+      await this.waitForApiErrorCooldown();
+      await this.rateLimitManager.checkRateLimit();
+      
       // Use Twitter API v2 to get tweet details by IDs
       const response = await this.twitterService.getTweetsByIds(tweetIds);
       this.rateLimitManager.incrementRequestCount();
       return response;
     } catch (error) {
-      this.logger.error('Failed to fetch engagement data', error);
+      await this.handleApiError(error, `fetchEngagementData(${tweetIds.length} tweets)`);
       throw error;
     }
   }
@@ -455,6 +494,7 @@ export class EngagementSyncService {
     }
 
     this.logger.info(`Starting automatic engagement sync every ${this.options.syncIntervalHours} hours`);
+    this.logger.info('📋 Note: API errors will trigger 15-minute cooldown periods');
 
     // Run initial sync
     this.runEngagementSync().catch(error => {
@@ -464,6 +504,13 @@ export class EngagementSyncService {
     // Set up interval
     this.syncInterval = setInterval(
       () => {
+        // Check if we're in API error cooldown before running sync
+        const timeSinceLastError = Date.now() - this.lastApiErrorTime;
+        if (timeSinceLastError < 15 * 60 * 1000) {
+          this.logger.info('Skipping scheduled sync - still in API error cooldown period');
+          return;
+        }
+        
         this.runEngagementSync().catch(error => {
           this.logger.error('Scheduled sync failed', error);
         });
