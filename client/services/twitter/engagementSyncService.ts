@@ -130,24 +130,42 @@ export class EngagementSyncService {
   /**
    * Store new tweets in the database
    */
-  private async storeNewTweets(daoSlug: string, tweets: TwitterPost[]): Promise<number> {
+  private async storeNewTweets(dao: any, tweets: TwitterPost[]): Promise<number> {
     if (tweets.length === 0) return 0;
 
-    const tableName = `dao_${daoSlug}_tweets`;
+    const tableName = `dao_${dao.slug}_tweets`;
     let stored = 0;
 
     for (const tweet of tweets) {
       try {
         const tweetData = {
           id: tweet.id,
+          type: 'tweet',
+          url: `https://x.com/${dao.twitter_handle}/status/${tweet.id}`,
+          twitter_url: `https://twitter.com/${dao.twitter_handle}/status/${tweet.id}`,
           text: tweet.text,
-          created_at: tweet.created_at,
-          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
+          source: (tweet as any).source || '',
           retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
           reply_count: tweet.public_metrics ? tweet.public_metrics.reply_count : 0,
+          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
           quote_count: tweet.public_metrics ? tweet.public_metrics.quote_count : 0,
           view_count: tweet.public_metrics?.impression_count || 0,
+          bookmark_count: 0, // Not available in Twitter API v2
+          created_at: tweet.created_at,
+          lang: (tweet as any).lang || 'en',
+          is_reply: (tweet as any).in_reply_to_user_id ? true : false,
+          in_reply_to_id: (tweet as any).in_reply_to_status_id || null,
+          conversation_id: (tweet as any).conversation_id || tweet.id,
+          in_reply_to_user_id: (tweet as any).in_reply_to_user_id || null,
+          in_reply_to_username: null,
+          author_username: dao.twitter_handle,
+          author_name: dao.name,
           author_id: tweet.author_id,
+          mentions: (tweet as any).entities?.mentions || [],
+          hashtags: (tweet as any).entities?.hashtags || [],
+          urls: (tweet as any).entities?.urls || [],
+          media: (tweet as any).attachments?.media_keys || [],
+          raw_data: tweet,
           synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -300,7 +318,7 @@ export class EngagementSyncService {
       // Step 1: Fetch and store new tweets from Twitter timeline
       this.logger.info(`Fetching new tweets from timeline for ${dao.name}`);
       const newTweets = await this.fetchNewTweetsFromTimeline(dao);
-      const newTweetsStored = await this.storeNewTweets(dao.slug, newTweets);
+      const newTweetsStored = await this.storeNewTweets(dao, newTweets);
       
       stats.tweetsAdded = newTweetsStored;
       stats.apiRequestsUsed = (stats.apiRequestsUsed || 0) + (newTweets.length > 0 ? 2 : 1); // User lookup + timeline fetch
