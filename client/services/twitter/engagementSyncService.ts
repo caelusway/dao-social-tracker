@@ -1,8 +1,8 @@
-import { supabase } from '../supabase/client';
-import TwitterService from './twitterService';
-import { TwitterPost } from './types';
-import { RateLimitManager } from './rateLimitManager';
-import { SyncLogger } from './syncLogger';
+import { supabase } from '../supabase/client.js';
+import TwitterService from './twitterService.js';
+import { TwitterPost } from './types.js';
+import { RateLimitManager } from './rateLimitManager.js';
+import { SyncLogger } from './syncLogger.js';
 
 export interface EngagementSyncOptions {
   daysToLookBack: number;

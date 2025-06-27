@@ -1,5 +1,5 @@
-import { supabase } from '../supabase/client';
-import { SyncStats } from './engagementSyncService';
+import { supabase } from '../supabase/client.js';
+import { SyncStats } from './engagementSyncService.js';
 
 export enum LogLevel {
   DEBUG = 0,

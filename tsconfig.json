@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "node",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowImportingTsExtensions": false,
@@ -10,7 +10,7 @@
     "isolatedModules": true,
     "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./client",
+    "rootDir": "./",
     "removeComments": true,
     "strict": true,
     "noImplicitAny": true,
@@ -25,7 +25,8 @@
     "types": ["node"]
   },
   "include": [
-    "client/**/*"
+    "client/**/*",
+    "server.ts"
   ],
   "exclude": [
     "node_modules",

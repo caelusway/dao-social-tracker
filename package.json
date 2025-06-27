@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "DAO Social Tracker with Twitter sync service for tracking engagement data",
   "main": "dist/index.js",
-  "type": "module",
   "scripts": {
-    "start": "node dist/server.js",
-    "start:prod": "npm run build && node dist/server.js",
+    "start": "tsx server.ts",
+    "start:prod": "npm run build && tsx server.ts",
     "dev": "tsx client/index.ts",
     "build": "npx tsc",
     "railway:build": "npm run build",

@@ -1,5 +1,5 @@
-import { EngagementSyncService } from './client/services/twitter/index.js';
-import { SyncLogger, LogLevel } from './client/services/twitter/index.js';
+import { EngagementSyncService } from './client/services/twitter/index';
+import { SyncLogger, LogLevel } from './client/services/twitter/index';
 
 // Production environment configuration
 const CONFIG = {
