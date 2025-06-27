@@ -9,9 +9,9 @@ dotenv.config({ path: join(__dirname, '../../.env') });
 
 // Environment configuration for the DAO social tracker
 export const ENV_CONFIG = {
-  // Supabase Configuration
-  SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  // Supabase Configuration - Support both Next.js and standard naming
+  SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
+  SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   
   // Twitter API Configuration
@@ -25,8 +25,8 @@ export const ENV_CONFIG = {
   // Get missing variables
   getMissingVars: function(): string[] {
     const missing: string[] = [];
-    if (!this.SUPABASE_URL) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-    if (!this.SUPABASE_ANON_KEY) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    if (!this.SUPABASE_URL) missing.push('SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL');
+    if (!this.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY');
     return missing;
   }
 }; 

@@ -22,10 +22,14 @@ git push origin main
 In Railway dashboard, go to your service → Variables tab and add:
 
 ```bash
-# Required Variables
+# Required Variables (Standard naming - preferred for production)
 TWITTER_BEARER_TOKEN=your_twitter_bearer_token
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Alternative naming (Next.js convention - also supported)
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Optional Configuration
 SYNC_INTERVAL_HOURS=2
@@ -49,6 +53,8 @@ NODE_ENV=production
 | `MAX_REQUESTS_PER_BATCH` | ❌ Optional | 5 | API requests per batch |
 | `LOG_LEVEL` | ❌ Optional | INFO | DEBUG, INFO, WARN, ERROR |
 | `NODE_ENV` | ❌ Optional | production | Environment type |
+
+**Note**: The app supports both `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL` naming conventions. Use the standard naming (`SUPABASE_URL`) for production deployments.
 
 ### **Getting Your Credentials**
 
