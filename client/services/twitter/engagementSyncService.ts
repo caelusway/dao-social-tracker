@@ -76,11 +76,11 @@ export class EngagementSyncService {
   }
 
   /**
-   * Get all DAOs with their Twitter handles
+   * Get all accounts with their Twitter handles
    */
   private async getDAOTwitterAccounts() {
     const { data, error } = await supabase
-      .from('daos')
+      .from('accounts')
       .select(`
         id,
         slug,
@@ -90,7 +90,7 @@ export class EngagementSyncService {
       .not('twitter_handle', 'is', null);
 
     if (error) {
-      this.logger.error('Failed to fetch DAO Twitter accounts', error);
+      this.logger.error('Failed to fetch account Twitter handles', error);
       throw error;
     }
 
@@ -114,10 +114,10 @@ export class EngagementSyncService {
   }
 
   /**
-   * Get the last synced tweet ID for a DAO to avoid duplicates  
+   * Get the last synced tweet ID for an account to avoid duplicates  
    */
-  private async getLastSyncedTweetId(daoSlug: string): Promise<string | null> {
-    const tableName = `dao_${daoSlug}_tweets`;
+  private async getLastSyncedTweetId(accountSlug: string): Promise<string | null> {
+    const tableName = `account_${accountSlug}_tweets`;
     
     const { data, error } = await supabase
       .from(tableName)
@@ -126,7 +126,7 @@ export class EngagementSyncService {
       .limit(1);
 
     if (error) {
-      this.logger.error(`Failed to get last synced tweet for ${daoSlug}`, error);
+      this.logger.error(`Failed to get last synced tweet for ${accountSlug}`, error);
       return null;
     }
 
@@ -134,21 +134,21 @@ export class EngagementSyncService {
   }
 
   /**
-   * Fetch new tweets from Twitter timeline for a DAO
+   * Fetch new tweets from Twitter timeline for an account
    */
-  private async fetchNewTweetsFromTimeline(dao: any): Promise<TwitterPost[]> {
+  private async fetchNewTweetsFromTimeline(account: any): Promise<TwitterPost[]> {
     try {
       // Get Twitter user ID
-      const userId = await this.getTwitterUserId(dao.twitter_handle);
+      const userId = await this.getTwitterUserId(account.twitter_handle);
       if (!userId) {
-        this.logger.warn(`Could not find Twitter user ID for @${dao.twitter_handle}`);
+        this.logger.warn(`Could not find Twitter user ID for @${account.twitter_handle}`);
         return [];
       }
 
       // Get last synced tweet ID to avoid duplicates
-      const lastTweetId = await this.getLastSyncedTweetId(dao.slug);
+      const lastTweetId = await this.getLastSyncedTweetId(account.slug);
       
-      this.logger.info(`Fetching new tweets for ${dao.name} since ${lastTweetId || 'beginning'}`);
+      this.logger.info(`Fetching new tweets for ${account.name} since ${lastTweetId || 'beginning'}`);
 
       // Fetch new tweets from timeline
       await this.waitForApiErrorCooldown();
@@ -156,11 +156,11 @@ export class EngagementSyncService {
       const newTweets = await this.twitterService.fetchUserTweets(userId, lastTweetId || undefined);
       this.rateLimitManager.incrementRequestCount();
 
-      this.logger.info(`Found ${newTweets.length} new tweets for ${dao.name}`);
+      this.logger.info(`Found ${newTweets.length} new tweets for ${account.name}`);
       return newTweets;
 
     } catch (error) {
-      await this.handleApiError(error, `fetchNewTweetsFromTimeline(${dao.name})`);
+      await this.handleApiError(error, `fetchNewTweetsFromTimeline(${account.name})`);
       return [];
     }
   }
@@ -168,10 +168,10 @@ export class EngagementSyncService {
   /**
    * Store new tweets in the database
    */
-  private async storeNewTweets(dao: any, tweets: TwitterPost[]): Promise<number> {
+  private async storeNewTweets(account: any, tweets: TwitterPost[]): Promise<number> {
     if (tweets.length === 0) return 0;
 
-    const tableName = `dao_${dao.slug}_tweets`;
+    const tableName = `account_${account.slug}_tweets`;
     let stored = 0;
 
     for (const tweet of tweets) {
@@ -179,8 +179,8 @@ export class EngagementSyncService {
         const tweetData = {
           id: tweet.id,
           type: 'tweet',
-          url: `https://x.com/${dao.twitter_handle}/status/${tweet.id}`,
-          twitter_url: `https://twitter.com/${dao.twitter_handle}/status/${tweet.id}`,
+          url: `https://x.com/${account.twitter_handle}/status/${tweet.id}`,
+          twitter_url: `https://twitter.com/${account.twitter_handle}/status/${tweet.id}`,
           text: tweet.text,
           source: (tweet as any).source || '',
           retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
@@ -196,8 +196,8 @@ export class EngagementSyncService {
           conversation_id: (tweet as any).conversation_id || tweet.id,
           in_reply_to_user_id: (tweet as any).in_reply_to_user_id || null,
           in_reply_to_username: null,
-          author_username: dao.twitter_handle,
-          author_name: dao.name,
+          author_username: account.twitter_handle,
+          author_name: account.name,
           author_id: tweet.author_id,
           mentions: (tweet as any).entities?.mentions || [],
           hashtags: (tweet as any).entities?.hashtags || [],
@@ -232,13 +232,13 @@ export class EngagementSyncService {
   }
 
   /**
-   * Get tweets from the last N days for a specific DAO
+   * Get tweets from the last N days for a specific account
    */
-  private async getRecentTweets(daoSlug: string, days: number = 5) {
+  private async getRecentTweets(accountSlug: string, days: number = 5) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
-    const tableName = `dao_${daoSlug}_tweets`;
+    const tableName = `account_${accountSlug}_tweets`;
     
     const { data, error } = await supabase
       .from(tableName)
@@ -247,7 +247,7 @@ export class EngagementSyncService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      this.logger.error(`Failed to fetch recent tweets for ${daoSlug}`, error);
+      this.logger.error(`Failed to fetch recent tweets for ${accountSlug}`, error);
       return [];
     }
 
@@ -276,10 +276,10 @@ export class EngagementSyncService {
    * Update engagement metrics in Supabase
    */
   private async updateEngagementMetrics(
-    daoSlug: string,
+    accountSlug: string,
     tweets: TwitterPost[]
   ): Promise<{ updated: number; added: number }> {
-    const tableName = `dao_${daoSlug}_tweets`;
+    const tableName = `account_${accountSlug}_tweets`;
     let updated = 0;
     let added = 0;
 
@@ -339,9 +339,9 @@ export class EngagementSyncService {
   }
 
   /**
-   * Sync engagement data for a specific DAO
+   * Sync engagement data for a specific account
    */
-  private async syncDAOEngagement(dao: any): Promise<Partial<SyncStats>> {
+  private async syncDAOEngagement(account: any): Promise<Partial<SyncStats>> {
     const startTime = Date.now();
     const stats: Partial<SyncStats> = {
       totalTweetsProcessed: 0,
@@ -352,27 +352,27 @@ export class EngagementSyncService {
     };
 
     try {
-      this.logger.info(`Starting engagement sync for ${dao.name} (@${dao.twitter_handle})`);
+      this.logger.info(`Starting engagement sync for ${account.name} (@${account.twitter_handle})`);
 
       // Step 1: Fetch and store new tweets from Twitter timeline
-      this.logger.info(`Fetching new tweets from timeline for ${dao.name}`);
-      const newTweets = await this.fetchNewTweetsFromTimeline(dao);
-      const newTweetsStored = await this.storeNewTweets(dao, newTweets);
+      this.logger.info(`Fetching new tweets from timeline for ${account.name}`);
+      const newTweets = await this.fetchNewTweetsFromTimeline(account);
+      const newTweetsStored = await this.storeNewTweets(account, newTweets);
       
       stats.tweetsAdded = newTweetsStored;
       stats.apiRequestsUsed = (stats.apiRequestsUsed || 0) + (newTweets.length > 0 ? 2 : 1); // User lookup + timeline fetch
       
-      this.logger.info(`Stored ${newTweetsStored} new tweets for ${dao.name}`);
+      this.logger.info(`Stored ${newTweetsStored} new tweets for ${account.name}`);
 
       // Step 2: Get recent tweets from our database (including newly added ones)
-      const recentTweets = await this.getRecentTweets(dao.slug, this.options.daysToLookBack);
+      const recentTweets = await this.getRecentTweets(account.slug, this.options.daysToLookBack);
       
       if (recentTweets.length === 0) {
-        this.logger.info(`No recent tweets found for ${dao.name}`);
+        this.logger.info(`No recent tweets found for ${account.name}`);
         return stats;
       }
 
-      this.logger.info(`Found ${recentTweets.length} recent tweets to update engagement for ${dao.name}`);
+      this.logger.info(`Found ${recentTweets.length} recent tweets to update engagement for ${account.name}`);
 
       // Step 3: Process tweets in batches to respect rate limits
       const batchSize = this.options.maxRequestsPerBatch;
@@ -393,7 +393,7 @@ export class EngagementSyncService {
           stats.apiRequestsUsed = (stats.apiRequestsUsed || 0) + 1;
 
           // Update engagement metrics
-          const { updated, added } = await this.updateEngagementMetrics(dao.slug, freshTweets);
+          const { updated, added } = await this.updateEngagementMetrics(account.slug, freshTweets);
           
           stats.tweetsUpdated = (stats.tweetsUpdated || 0) + updated;
           stats.tweetsAdded = (stats.tweetsAdded || 0) + added;
@@ -402,7 +402,7 @@ export class EngagementSyncService {
           this.logger.info(`Processed batch: ${updated} updated, ${added} added`);
           
         } catch (error) {
-          const errorMsg = `Failed to process batch for ${dao.name}: ${error}`;
+          const errorMsg = `Failed to process batch for ${account.name}: ${error}`;
           stats.errors?.push(errorMsg);
           this.logger.error(errorMsg, error);
         }
@@ -411,10 +411,10 @@ export class EngagementSyncService {
       const duration = Date.now() - startTime;
       stats.syncDuration = duration;
 
-      this.logger.info(`Completed sync for ${dao.name}: ${stats.totalTweetsProcessed} tweets processed in ${duration}ms`);
+      this.logger.info(`Completed sync for ${account.name}: ${stats.totalTweetsProcessed} tweets processed in ${duration}ms`);
 
     } catch (error) {
-      const errorMsg = `Failed to sync ${dao.name}: ${error}`;
+      const errorMsg = `Failed to sync ${account.name}: ${error}`;
       stats.errors?.push(errorMsg);
       this.logger.error(errorMsg, error);
     }
@@ -423,7 +423,7 @@ export class EngagementSyncService {
   }
 
   /**
-   * Run engagement sync for all DAOs
+   * Run engagement sync for all accounts
    */
   async runEngagementSync(): Promise<SyncStats> {
     if (this.isRunning) {
@@ -446,22 +446,22 @@ export class EngagementSyncService {
     try {
       this.logger.info('Starting Twitter engagement sync cycle');
 
-      const daos = await this.getDAOTwitterAccounts();
-      this.logger.info(`Found ${daos.length} DAOs with Twitter handles`);
+      const accounts = await this.getDAOTwitterAccounts();
+      this.logger.info(`Found ${accounts.length} accounts with Twitter handles`);
 
-      for (const dao of daos) {
+      for (const account of accounts) {
         try {
-          const daoStats = await this.syncDAOEngagement(dao);
+          const accountStats = await this.syncDAOEngagement(account);
           
           // Aggregate stats
-          aggregateStats.totalTweetsProcessed += daoStats.totalTweetsProcessed || 0;
-          aggregateStats.tweetsUpdated += daoStats.tweetsUpdated || 0;
-          aggregateStats.tweetsAdded += daoStats.tweetsAdded || 0;
-          aggregateStats.apiRequestsUsed += daoStats.apiRequestsUsed || 0;
-          aggregateStats.errors.push(...(daoStats.errors || []));
+          aggregateStats.totalTweetsProcessed += accountStats.totalTweetsProcessed || 0;
+          aggregateStats.tweetsUpdated += accountStats.tweetsUpdated || 0;
+          aggregateStats.tweetsAdded += accountStats.tweetsAdded || 0;
+          aggregateStats.apiRequestsUsed += accountStats.apiRequestsUsed || 0;
+          aggregateStats.errors.push(...(accountStats.errors || []));
 
         } catch (error) {
-          const errorMsg = `Failed to sync DAO ${dao.name}: ${error}`;
+          const errorMsg = `Failed to sync account ${account.name}: ${error}`;
           aggregateStats.errors.push(errorMsg);
           this.logger.error(errorMsg, error);
         }

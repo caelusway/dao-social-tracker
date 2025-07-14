@@ -100,8 +100,8 @@ const stats = await logger.getAggregatedStats(7);
 
 ## 🔄 How It Works
 
-1. **Fetch DAOs**: Gets all DAOs with Twitter handles from Supabase
-2. **Get Recent Tweets**: Retrieves tweets from the last 5 days for each DAO
+1. **Fetch Accounts**: Gets all accounts with Twitter handles from Supabase
+2. **Get Recent Tweets**: Retrieves tweets from the last 5 days for each account
 3. **Batch Processing**: Groups tweet IDs into batches to respect rate limits
 4. **API Calls**: Fetches fresh engagement data from Twitter API
 5. **Update Database**: Updates or inserts engagement metrics in Supabase
@@ -128,9 +128,9 @@ interface SyncStats {
 
 The system creates and uses these tables:
 
-- `dao_sync_logs` - Detailed log entries
-- `dao_sync_stats` - Aggregated sync statistics
-- `dao_[slug]_tweets` - Individual DAO tweet tables (created dynamically)
+- `account_sync_logs` - Detailed log entries
+- `account_sync_stats` - Aggregated sync statistics
+- `account_[slug]_tweets` - Individual account tweet tables (created dynamically)
 
 ### Viewing Statistics
 
@@ -153,7 +153,7 @@ const detailedStats = await logger.getSyncStatsForDateRange(
 The system includes comprehensive error handling:
 
 - **Rate Limit Errors**: Automatically waits and retries
-- **API Errors**: Logs errors and continues with next DAO
+- **API Errors**: Logs errors and continues with next account
 - **Database Errors**: Detailed error logging without stopping the process
 - **Network Errors**: Retry logic with exponential backoff
 

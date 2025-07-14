@@ -10,7 +10,7 @@ async function setupEngagementSync() {
     // Check if required tables exist
     console.log('📋 Checking database tables...');
     
-    const tables = ['dao_sync_logs', 'dao_sync_stats', 'daos'];
+    const tables = ['account_sync_logs', 'account_sync_stats', 'accounts'];
     for (const table of tables) {
       const { data, error } = await supabase.from(table).select('*').limit(1);
       if (error) {
@@ -51,25 +51,25 @@ async function setupEngagementSync() {
     console.log('📝 Testing logging system...');
     logger.info('Setup test log entry');
     
-    // Check for DAOs with Twitter handles
-    console.log('🏛️  Checking for DAOs with Twitter handles...');
-    const { data: daos, error: daoError } = await supabase
-      .from('daos')
+    // Check for accounts with Twitter handles
+    console.log('🏛️  Checking for accounts with Twitter handles...');
+    const { data: accounts, error: accountError } = await supabase
+      .from('accounts')
       .select('id, name, slug, twitter_handle')
       .not('twitter_handle', 'is', null);
 
-    if (daoError) {
-      console.error('❌ Error fetching DAOs:', daoError.message);
+    if (accountError) {
+      console.error('❌ Error fetching accounts:', accountError.message);
       return;
     }
 
-    if (!daos || daos.length === 0) {
-      console.log('⚠️  No DAOs with Twitter handles found');
-      console.log('💡 Add Twitter handles to your DAOs in the database first');
+    if (!accounts || accounts.length === 0) {
+      console.log('⚠️  No accounts with Twitter handles found');
+      console.log('💡 Add Twitter handles to your accounts in the database first');
     } else {
-      console.log(`✅ Found ${daos.length} DAOs with Twitter handles:`);
-      daos.forEach(dao => {
-        console.log(`   - ${dao.name} (@${dao.twitter_handle})`);
+      console.log(`✅ Found ${accounts.length} accounts with Twitter handles:`);
+      accounts.forEach(account => {
+        console.log(`   - ${account.name} (@${account.twitter_handle})`);
       });
     }
 
