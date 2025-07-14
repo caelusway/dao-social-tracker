@@ -27,6 +27,94 @@ export class EngagementSyncService {
   private isRunning: boolean = false;
   private lastApiErrorTime: number = 0;
 
+  /**
+   * Safely convert Twitter date to PostgreSQL timestamp format
+   */
+  private formatTwitterDate(dateString: string): string {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        throw new Error('Invalid date');
+      }
+      return date.toISOString();
+    } catch (error) {
+      this.logger.warn(`Invalid date format: ${dateString}, using current timestamp`);
+      return new Date().toISOString();
+    }
+  }
+
+  /**
+   * Validate and sanitize tweet data before database insertion
+   */
+  private validateTweetData(tweet: any, account: any): { isValid: boolean; data?: any; error?: string } {
+    try {
+      // Check required fields
+      if (!tweet.id || typeof tweet.id !== 'string') {
+        return { isValid: false, error: 'Missing or invalid tweet ID' };
+      }
+
+      if (!tweet.text || typeof tweet.text !== 'string') {
+        return { isValid: false, error: 'Missing or invalid tweet text' };
+      }
+
+      if (!tweet.created_at || typeof tweet.created_at !== 'string') {
+        return { isValid: false, error: 'Missing or invalid tweet created_at' };
+      }
+
+      // Ensure text is not too long (PostgreSQL text limit)
+      const truncatedText = tweet.text.length > 5000 ? tweet.text.substring(0, 5000) + '...' : tweet.text;
+
+      // Format and validate date
+      const formattedDate = this.formatTwitterDate(tweet.created_at);
+
+      // Sanitize metrics
+      const metrics = tweet.public_metrics || {};
+      const safeMetrics = {
+        retweet_count: Math.max(0, parseInt(metrics.retweet_count) || 0),
+        reply_count: Math.max(0, parseInt(metrics.reply_count) || 0),
+        like_count: Math.max(0, parseInt(metrics.like_count) || 0),
+        quote_count: Math.max(0, parseInt(metrics.quote_count) || 0),
+        view_count: Math.max(0, parseInt(metrics.impression_count) || 0)
+      };
+
+      const tweetData = {
+        id: tweet.id,
+        type: 'tweet',
+        url: `https://x.com/${account.twitter_handle}/status/${tweet.id}`,
+        twitter_url: `https://twitter.com/${account.twitter_handle}/status/${tweet.id}`,
+        text: truncatedText,
+        source: (tweet.source || '').toString().substring(0, 255), // Limit source length
+        retweet_count: safeMetrics.retweet_count,
+        reply_count: safeMetrics.reply_count,
+        like_count: safeMetrics.like_count,
+        quote_count: safeMetrics.quote_count,
+        view_count: safeMetrics.view_count,
+        bookmark_count: 0, // Not available in Twitter API v2
+        created_at: formattedDate,
+        lang: ((tweet.lang || 'en').toString().substring(0, 10)), // Limit language code length
+        is_reply: Boolean(tweet.in_reply_to_user_id),
+        in_reply_to_id: tweet.in_reply_to_status_id || null,
+        conversation_id: tweet.conversation_id || tweet.id,
+        in_reply_to_user_id: tweet.in_reply_to_user_id || null,
+        in_reply_to_username: null,
+        author_username: account.twitter_handle,
+        author_name: account.name,
+        author_id: tweet.author_id || null,
+        mentions: Array.isArray(tweet.entities?.mentions) ? tweet.entities.mentions : [],
+        hashtags: Array.isArray(tweet.entities?.hashtags) ? tweet.entities.hashtags : [],
+        urls: Array.isArray(tweet.entities?.urls) ? tweet.entities.urls : [],
+        media: Array.isArray(tweet.attachments?.media_keys) ? tweet.attachments.media_keys : [],
+        raw_data: tweet,
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      return { isValid: true, data: tweetData };
+    } catch (error) {
+      return { isValid: false, error: `Data validation failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
   constructor(
     bearerToken: string,
     private options: EngagementSyncOptions = {
@@ -176,55 +264,49 @@ export class EngagementSyncService {
 
     for (const tweet of tweets) {
       try {
-        const tweetData = {
-          id: tweet.id,
-          type: 'tweet',
-          url: `https://x.com/${account.twitter_handle}/status/${tweet.id}`,
-          twitter_url: `https://twitter.com/${account.twitter_handle}/status/${tweet.id}`,
-          text: tweet.text,
-          source: (tweet as any).source || '',
-          retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
-          reply_count: tweet.public_metrics ? tweet.public_metrics.reply_count : 0,
-          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
-          quote_count: tweet.public_metrics ? tweet.public_metrics.quote_count : 0,
-          view_count: tweet.public_metrics?.impression_count || 0,
-          bookmark_count: 0, // Not available in Twitter API v2
-          created_at: tweet.created_at,
-          lang: (tweet as any).lang || 'en',
-          is_reply: (tweet as any).in_reply_to_user_id ? true : false,
-          in_reply_to_id: (tweet as any).in_reply_to_status_id || null,
-          conversation_id: (tweet as any).conversation_id || tweet.id,
-          in_reply_to_user_id: (tweet as any).in_reply_to_user_id || null,
-          in_reply_to_username: null,
-          author_username: account.twitter_handle,
-          author_name: account.name,
-          author_id: tweet.author_id,
-          mentions: (tweet as any).entities?.mentions || [],
-          hashtags: (tweet as any).entities?.hashtags || [],
-          urls: (tweet as any).entities?.urls || [],
-          media: (tweet as any).attachments?.media_keys || [],
-          raw_data: tweet,
-          synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+        // Validate and sanitize tweet data
+        const validation = this.validateTweetData(tweet, account);
+        if (!validation.isValid) {
+          this.logger.error(`Invalid tweet data for ${tweet.id || 'unknown'}: ${validation.error}`, {
+            tweetId: tweet.id,
+            accountSlug: account.slug,
+            validationError: validation.error
+          });
+          continue;
+        }
 
         const { error } = await supabase
           .from(tableName)
-          .insert(tweetData);
+          .insert(validation.data);
 
         if (error) {
           // Skip if already exists (duplicate key)
           if (error.code === '23505') {
             this.logger.debug(`Tweet ${tweet.id} already exists, skipping`);
           } else {
-            this.logger.error(`Failed to store tweet ${tweet.id}`, error);
+            this.logger.error(`Failed to store tweet ${tweet.id}: ${error.message}`, {
+              error: error,
+              errorCode: error.code,
+              errorDetails: error.details,
+              errorHint: error.hint,
+              tweetId: tweet.id,
+              accountSlug: account.slug,
+              tableName: tableName,
+              tweetData: validation.data
+            });
           }
         } else {
           stored++;
           this.logger.debug(`Stored new tweet ${tweet.id}`);
         }
       } catch (error) {
-        this.logger.error(`Error storing tweet ${tweet.id}`, error);
+        this.logger.error(`Error storing tweet ${tweet.id}: ${error instanceof Error ? error.message : String(error)}`, {
+          error: error,
+          tweetId: tweet.id,
+          accountSlug: account.slug,
+          tableName: tableName,
+          errorStack: error instanceof Error ? error.stack : undefined
+        });
       }
     }
 
@@ -285,22 +367,37 @@ export class EngagementSyncService {
 
     for (const tweet of tweets) {
       try {
+        // Find the account info for validation
+        const account = { slug: accountSlug, twitter_handle: 'unknown', name: 'unknown' };
+        
+        // Validate and sanitize tweet data
+        const validation = this.validateTweetData(tweet, account);
+        if (!validation.isValid) {
+          this.logger.error(`Invalid tweet data for ${tweet.id || 'unknown'}: ${validation.error}`, {
+            tweetId: tweet.id,
+            accountSlug: accountSlug,
+            validationError: validation.error
+          });
+          continue;
+        }
+
         const { data: existingTweet } = await supabase
           .from(tableName)
           .select('id, like_count, retweet_count, reply_count, quote_count')
           .eq('id', tweet.id)
           .single();
 
-        const tweetData = {
-          id: tweet.id,
-          text: tweet.text,
-          created_at: tweet.created_at,
-          like_count: tweet.public_metrics ? tweet.public_metrics.like_count : 0,
-          retweet_count: tweet.public_metrics ? tweet.public_metrics.retweet_count : 0,
-          reply_count: tweet.public_metrics ? tweet.public_metrics.reply_count : 0,
-          quote_count: tweet.public_metrics ? tweet.public_metrics.quote_count : 0,
-          view_count: tweet.public_metrics?.impression_count || 0,
-          author_id: tweet.author_id,
+        // For updates, we only need engagement metrics and timestamps
+        const updateData = {
+          id: validation.data.id,
+          text: validation.data.text,
+          created_at: validation.data.created_at,
+          like_count: validation.data.like_count,
+          retweet_count: validation.data.retweet_count,
+          reply_count: validation.data.reply_count,
+          quote_count: validation.data.quote_count,
+          view_count: validation.data.view_count,
+          author_id: validation.data.author_id,
           updated_at: new Date().toISOString()
         };
 
@@ -308,30 +405,54 @@ export class EngagementSyncService {
           // Update existing tweet
           const { error } = await supabase
             .from(tableName)
-            .update(tweetData)
+            .update(updateData)
             .eq('id', tweet.id);
 
           if (error) {
-            this.logger.error(`Failed to update tweet ${tweet.id}`, error);
+            this.logger.error(`Failed to update tweet ${tweet.id}: ${error.message}`, {
+              error: error,
+              errorCode: error.code,
+              errorDetails: error.details,
+              errorHint: error.hint,
+              tweetId: tweet.id,
+              accountSlug: accountSlug,
+              tableName: tableName,
+              updateData: updateData
+            });
           } else {
             updated++;
             this.logger.debug(`Updated engagement for tweet ${tweet.id}`);
           }
         } else {
-          // Add new tweet
+          // Add new tweet (use full validated data)
           const { error } = await supabase
             .from(tableName)
-            .insert(tweetData);
+            .insert(validation.data);
 
           if (error) {
-            this.logger.error(`Failed to insert tweet ${tweet.id}`, error);
+            this.logger.error(`Failed to insert tweet ${tweet.id}: ${error.message}`, {
+              error: error,
+              errorCode: error.code,
+              errorDetails: error.details,
+              errorHint: error.hint,
+              tweetId: tweet.id,
+              accountSlug: accountSlug,
+              tableName: tableName,
+              insertData: validation.data
+            });
           } else {
             added++;
             this.logger.debug(`Added new tweet ${tweet.id}`);
           }
         }
       } catch (error) {
-        this.logger.error(`Error processing tweet ${tweet.id}`, error);
+        this.logger.error(`Error processing tweet ${tweet.id}: ${error instanceof Error ? error.message : String(error)}`, {
+          error: error,
+          tweetId: tweet.id,
+          accountSlug: accountSlug,
+          tableName: tableName,
+          errorStack: error instanceof Error ? error.stack : undefined
+        });
       }
     }
 

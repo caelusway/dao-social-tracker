@@ -31,7 +31,8 @@
     "sync:followers": "tsx client/scripts/sync-follower-counts.ts",
     "test:followers": "tsx client/examples/follower-tracking-example.ts",
     "engagement:setup": "tsx client/scripts/setup-engagement-sync.ts setup",
-    "engagement:health": "tsx client/scripts/setup-engagement-sync.ts health"
+    "engagement:health": "tsx client/scripts/setup-engagement-sync.ts health",
+    "debug:tweets": "tsx client/scripts/debug-tweet-data.ts"
   },
   "keywords": [
     "dao",
