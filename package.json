@@ -28,6 +28,8 @@
     "twitter:sync": "tsx client/examples/twitter-sync-example.ts",
     "twitter:start": "tsx client/services/twitter/index.ts",
     "engagement:sync": "tsx client/examples/engagement-sync-example.ts",
+    "sync:followers": "tsx client/scripts/sync-follower-counts.ts",
+    "test:followers": "tsx client/examples/follower-tracking-example.ts",
     "engagement:setup": "tsx client/scripts/setup-engagement-sync.ts setup",
     "engagement:health": "tsx client/scripts/setup-engagement-sync.ts health"
   },

@@ -273,4 +273,13 @@ export class AccountTwitterService {
     
     return Array.from(metrics.values());
   }
-} 
+}
+
+// Backward compatibility - export the old class name
+export class DAOTwitterService extends AccountTwitterService {
+  // All methods are inherited from AccountTwitterService
+  // This class exists for backward compatibility only
+}
+
+// Also export as default for backward compatibility
+export default AccountTwitterService; 

@@ -1,9 +1,18 @@
 import dotenv from 'dotenv';
 import { DAOService } from '../services/dao/daoService';
-import { DAOTwitterService } from '../services/dao/daoTwitterService';
+import { DAOTwitterService, TwitterPost } from '../services/dao/daoTwitterService';
 
 // Load environment variables
 dotenv.config();
+
+// Define the engagement metrics type
+type EngagementMetrics = {
+  date: string;
+  tweet_count: number;
+  total_likes: number;
+  total_retweets: number;
+  total_views: number;
+};
 
 async function testDAOTwitterService() {
   const daoService = new DAOService();
@@ -20,37 +29,18 @@ async function testDAOTwitterService() {
       console.log(`\n🏛️  DAO: ${dao.name} (${dao.slug})`);
       
       try {
-        // Get Twitter analytics for this DAO
-        const analytics = await twitterService.getTwitterAnalytics(dao.slug);
-        
-        console.log(`📈 Twitter Analytics:`);
-        console.log(`  • Total tweets: ${analytics.total_tweets}`);
-        console.log(`  • Total likes: ${analytics.total_likes.toLocaleString()}`);
-        console.log(`  • Total retweets: ${analytics.total_retweets.toLocaleString()}`);
-        console.log(`  • Total views: ${analytics.total_views.toLocaleString()}`);
-        console.log(`  • Avg likes per tweet: ${analytics.avg_likes_per_tweet}`);
-        console.log(`  • Avg retweets per tweet: ${analytics.avg_retweets_per_tweet}`);
-        console.log(`  • Avg views per tweet: ${analytics.avg_views_per_tweet}`);
-        
-        if (analytics.most_liked_tweet) {
-          console.log(`\n🔥 Most liked tweet (${analytics.most_liked_tweet.like_count} likes):`);
-          console.log(`   "${analytics.most_liked_tweet.text?.substring(0, 100)}..."`);
-        }
-        
-        if (analytics.most_retweeted_tweet) {
-          console.log(`\n🔄 Most retweeted tweet (${analytics.most_retweeted_tweet.retweet_count} retweets):`);
-          console.log(`   "${analytics.most_retweeted_tweet.text?.substring(0, 100)}..."`);
-        }
+        // Test creating a Twitter table for this DAO
+        await twitterService.createAccountTwitterTable(dao.slug);
         
         // Get recent tweets
-        console.log(`\n📝 Recent tweets (last 5):`);
-        const recentTweets = await twitterService.getTwitterPosts(dao.slug, { 
-          limit: 5, 
-          orderBy: 'created_at',
+        console.log(`\n📋 Recent tweets:`);
+        const recentTweets = await twitterService.getTwitterPosts(dao.slug, {
+          limit: 5,
+          orderBy: 'like_count',
           orderDirection: 'desc'
         });
         
-        recentTweets.forEach((tweet, index) => {
+        recentTweets.forEach((tweet: TwitterPost, index: number) => {
           console.log(`   ${index + 1}. [${tweet.like_count}❤️ ${tweet.retweet_count}🔄] "${tweet.text?.substring(0, 80)}..."`);
         });
         
@@ -59,9 +49,9 @@ async function testDAOTwitterService() {
         const metrics = await twitterService.getEngagementMetrics(dao.slug, 30);
         
         if (metrics.length > 0) {
-          const totalTweets = metrics.reduce((sum, day) => sum + day.tweet_count, 0);
-          const totalLikes = metrics.reduce((sum, day) => sum + day.total_likes, 0);
-          const totalRetweets = metrics.reduce((sum, day) => sum + day.total_retweets, 0);
+          const totalTweets = metrics.reduce((sum: number, day: EngagementMetrics) => sum + day.tweet_count, 0);
+          const totalLikes = metrics.reduce((sum: number, day: EngagementMetrics) => sum + day.total_likes, 0);
+          const totalRetweets = metrics.reduce((sum: number, day: EngagementMetrics) => sum + day.total_retweets, 0);
           
           console.log(`   • Total tweets in 30 days: ${totalTweets}`);
           console.log(`   • Total likes in 30 days: ${totalLikes.toLocaleString()}`);
@@ -69,7 +59,7 @@ async function testDAOTwitterService() {
           console.log(`   • Avg tweets per day: ${Math.round(totalTweets / 30)}`);
           
           // Show most active day
-          const mostActiveDay = metrics.reduce((max, day) => 
+          const mostActiveDay = metrics.reduce((max: EngagementMetrics, day: EngagementMetrics) => 
             day.tweet_count > max.tweet_count ? day : max
           );
           console.log(`   • Most active day: ${mostActiveDay.date} (${mostActiveDay.tweet_count} tweets)`);
@@ -78,30 +68,23 @@ async function testDAOTwitterService() {
         // Test search functionality
         console.log(`\n🔍 Searching for tweets with "research":`);
         const searchResults = await twitterService.searchTwitterPosts(dao.slug, 'research', { limit: 3 });
-        searchResults.forEach((tweet, index) => {
+        searchResults.forEach((tweet: TwitterPost, index: number) => {
           console.log(`   ${index + 1}. "${tweet.text?.substring(0, 80)}..."`);
         });
         
       } catch (error: any) {
-        if (error.message.includes('does not exist')) {
-          console.log(`   ⚠️  No Twitter table exists for ${dao.slug}`);
-          console.log(`   💡 Run "npm run import:twitter" to create tables and import data`);
-        } else {
-          console.log(`   ❌ Error fetching Twitter data: ${error.message}`);
-        }
+        console.error(`   ❌ Error processing DAO ${dao.slug}:`, error.message);
       }
     }
-
-    console.log('\n✅ DAO Twitter Service test completed!');
-
-  } catch (error) {
-    console.error('❌ Error testing DAO Twitter service:', error);
+    
+  } catch (error: any) {
+    console.error('❌ Error in DAO Twitter Service test:', error.message);
   }
 }
 
-// Run the test
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.includes('dao-twitter-example.ts')) {
+// Run the test if this file is executed directly
+if (require.main === module) {
   testDAOTwitterService().catch(console.error);
 }
 
-export { testDAOTwitterService }; 
+export default testDAOTwitterService; 
