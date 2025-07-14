@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { TwitterPost, DAOTwitterAccount } from './types';
+import { TwitterPost, AccountTwitterAccount } from './types';
 import { TWITTER_CONFIG, RATE_LIMITS, ENDPOINTS } from './config';
 import { supabase } from '../supabase/client';
 
@@ -48,19 +48,21 @@ class TwitterService {
       );
       return response.data.data;
     } catch (error) {
-      console.error(`Error fetching user ${username}:`, error);
-      throw error;
+      console.error(`Error fetching user by username ${username}:`, error);
+      return null;
     }
   }
 
-  async fetchUserTweets(userId: string, sinceId?: string): Promise<TwitterPost[]> {
+  async fetchUserTweets(userId: string, lastTweetId?: string): Promise<TwitterPost[]> {
     try {
       await this.checkRateLimit();
-      const params = {
-        'tweet.fields': 'created_at,public_metrics',
-        'max_results': TWITTER_CONFIG.MAX_TWEETS_PER_REQUEST,
-        ...(sinceId && { since_id: sinceId })
+      const params: any = {
+        'tweet.fields': 'created_at,public_metrics,author_id'
       };
+      
+      if (lastTweetId) {
+        params.since_id = lastTweetId;
+      }
 
       const response = await this.apiClient.get(
         ENDPOINTS.USER_TWEETS(userId),
@@ -74,14 +76,14 @@ class TwitterService {
     }
   }
 
-  async storeTwitterData(posts: TwitterPost[], daoId: string) {
+  async storeTwitterData(posts: TwitterPost[], accountId: string) {
     try {
       const { error } = await supabase
-        .from('dao_twitter_posts')
+        .from('account_twitter_posts')
         .upsert(
           posts.map(post => ({
             tweet_id: post.id,
-            dao_id: daoId,
+            account_id: accountId,
             content: post.text,
             created_at: post.created_at,
             retweet_count: post.public_metrics.retweet_count,
@@ -99,12 +101,12 @@ class TwitterService {
     }
   }
 
-  async updateSyncStatus(daoId: string, lastTweetId: string) {
+  async updateSyncStatus(accountId: string, lastTweetId: string) {
     try {
       const { error } = await supabase
-        .from('dao_twitter_sync_status')
+        .from('account_twitter_sync_status')
         .upsert({
-          dao_id: daoId,
+          account_id: accountId,
           last_tweet_id: lastTweetId,
           last_sync_time: new Date().toISOString()
         });

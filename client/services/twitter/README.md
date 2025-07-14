@@ -38,10 +38,10 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 2. Add your DAO Twitter accounts to the database:
    ```sql
-   INSERT INTO dao_twitter_accounts (dao_id, username)
-   VALUES 
-     ('your_dao_uuid', 'twitter_username_without_@'),
-     ('another_dao_uuid', 'another_twitter_username');
+   INSERT INTO account_twitter_accounts (account_id, username)
+VALUES 
+  ('your_account_uuid', 'twitter_username_without_@'),
+  ('another_account_uuid', 'another_twitter_username');
    ```
 
 ## Usage
@@ -89,16 +89,16 @@ console.log(metrics);
 
 ## Database Schema
 
-### dao_twitter_accounts
+### account_twitter_accounts
 - `id`: UUID primary key
-- `dao_id`: UUID reference to DAOs table
+- `account_id`: UUID reference to Accounts table
 - `username`: Twitter username (without @)
 - `created_at`: Timestamp
 
-### dao_twitter_posts
+### account_twitter_posts
 - `id`: UUID primary key
 - `tweet_id`: Unique Twitter post ID
-- `dao_id`: UUID reference to DAOs table
+- `account_id`: UUID reference to Accounts table
 - `content`: Tweet text content
 - `created_at`: When the tweet was posted
 - `retweet_count`: Number of retweets
@@ -107,8 +107,8 @@ console.log(metrics);
 - `quote_count`: Number of quote tweets
 - `synced_at`: When the data was synced
 
-### dao_twitter_sync_status
-- `dao_id`: UUID primary key reference to DAOs table
+### account_twitter_sync_status
+- `account_id`: UUID primary key reference to Accounts table
 - `last_tweet_id`: ID of the last synced tweet
 - `last_sync_time`: Timestamp of last sync
 - `created_at`: When the record was created

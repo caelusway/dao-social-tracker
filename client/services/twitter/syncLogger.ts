@@ -132,7 +132,7 @@ export class SyncLogger {
   private async storeLogEntry(logEntry: SyncLogEntry): Promise<void> {
     try {
       const { error } = await supabase
-        .from('dao_sync_logs')
+        .from('account_sync_logs')
         .insert(logEntry);
 
       if (error) {
@@ -170,7 +170,7 @@ export class SyncLogger {
     try {
              // Store detailed sync stats
        const { error } = await supabase
-         .from('dao_sync_stats')
+         .from('account_sync_stats')
          .insert({
           service: this.serviceName,
           total_tweets_processed: stats.totalTweetsProcessed,
@@ -197,7 +197,7 @@ export class SyncLogger {
   async getRecentLogs(limit: number = 100): Promise<SyncLogEntry[]> {
     try {
       const { data, error } = await supabase
-        .from('dao_sync_logs')
+        .from('account_sync_logs')
         .select('*')
         .eq('service', this.serviceName)
         .order('timestamp', { ascending: false })
@@ -221,7 +221,7 @@ export class SyncLogger {
   async getSyncStatsForDateRange(startDate: string, endDate: string) {
          try {
        const { data, error } = await supabase
-         .from('dao_sync_stats')
+         .from('account_sync_stats')
          .select('*')
          .eq('service', this.serviceName)
          .gte('timestamp', startDate)
@@ -249,7 +249,7 @@ export class SyncLogger {
 
          try {
        const { data, error } = await supabase
-         .from('dao_sync_stats')
+         .from('account_sync_stats')
          .select('*')
          .eq('service', this.serviceName)
          .gte('timestamp', startDate.toISOString());
@@ -306,7 +306,7 @@ export class SyncLogger {
 
     try {
       const { data, error, count } = await supabase
-        .from('dao_sync_logs')
+        .from('account_sync_logs')
         .delete()
         .eq('service', this.serviceName)
         .lt('timestamp', cutoffDate.toISOString());

@@ -1,7 +1,7 @@
 import { supabase } from '../supabase/client';
 import TwitterService from './twitterService';
 import { TWITTER_CONFIG } from './config';
-import { DAOTwitterAccount } from './types';
+import { AccountTwitterAccount } from './types';
 
 class TwitterSyncManager {
   private twitterService: TwitterService;
@@ -12,11 +12,11 @@ class TwitterSyncManager {
     this.twitterService = new TwitterService(bearerToken);
   }
 
-  private async getSyncStatus(daoId: string) {
+  private async getSyncStatus(accountId: string) {
     const { data, error } = await supabase
-      .from('dao_twitter_sync_status')
+      .from('account_twitter_sync_status')
       .select('last_tweet_id')
-      .eq('dao_id', daoId)
+      .eq('account_id', accountId)
       .single();
 
     if (error) {
@@ -27,20 +27,20 @@ class TwitterSyncManager {
     return data?.last_tweet_id;
   }
 
-  private async getDAOAccounts(): Promise<DAOTwitterAccount[]> {
+  private async getAccountAccounts(): Promise<AccountTwitterAccount[]> {
     const { data, error } = await supabase
-      .from('dao_twitter_accounts')
+      .from('account_twitter_accounts')
       .select('*');
 
     if (error) {
-      console.error('Error fetching DAO accounts:', error);
+      console.error('Error fetching Account accounts:', error);
       return [];
     }
 
     return data || [];
   }
 
-  async syncDaoTwitterData() {
+  async syncAccountTwitterData() {
     if (this.isRunning) {
       console.log('Sync already in progress, skipping...');
       return;
@@ -49,9 +49,9 @@ class TwitterSyncManager {
     this.isRunning = true;
 
     try {
-      const daoAccounts = await this.getDAOAccounts();
+      const accountAccounts = await this.getAccountAccounts();
 
-      for (const account of daoAccounts) {
+      for (const account of accountAccounts) {
         try {
           // Get user details first
           const user = await this.twitterService.getUserByUsername(account.username);
@@ -61,25 +61,25 @@ class TwitterSyncManager {
           }
 
           // Get last synced tweet ID
-          const lastTweetId = await this.getSyncStatus(account.dao_id);
+          const lastTweetId = await this.getSyncStatus(account.account_id);
 
           // Fetch new tweets
           const tweets = await this.twitterService.fetchUserTweets(user.id, lastTweetId);
 
           if (tweets.length > 0) {
             // Store the tweets
-            await this.twitterService.storeTwitterData(tweets, account.dao_id);
+            await this.twitterService.storeTwitterData(tweets, account.account_id);
 
             // Update sync status with the most recent tweet ID
-            await this.twitterService.updateSyncStatus(account.dao_id, tweets[0]?.id || '');
+            await this.twitterService.updateSyncStatus(account.account_id, tweets[0]?.id || '');
 
             console.log(`Successfully synced ${tweets.length} tweets for ${account.username}`);
           } else {
             console.log(`No new tweets found for ${account.username}`);
           }
         } catch (error) {
-          console.error(`Error processing DAO ${account.username}:`, error);
-          // Continue with next DAO even if one fails
+          console.error(`Error processing Account ${account.username}:`, error);
+          // Continue with next Account even if one fails
           continue;
         }
       }
@@ -97,11 +97,11 @@ class TwitterSyncManager {
     }
 
     // Run initial sync
-    this.syncDaoTwitterData();
+    this.syncAccountTwitterData();
 
     // Set up interval for future syncs
     this.syncInterval = setInterval(
-      () => this.syncDaoTwitterData(),
+      () => this.syncAccountTwitterData(),
       TWITTER_CONFIG.FETCH_INTERVAL
     );
 

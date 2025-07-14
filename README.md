@@ -35,14 +35,14 @@ A Node.js application that automatically tracks Twitter engagement data for DAOs
 3. **Set up Supabase:**
    - Install Supabase CLI: `npm install -g supabase`
    - Initialize Supabase: `supabase init`
-   - Run migrations: Copy the SQL from `supabase/migrations/20240101000001_create_dao_twitter_tables.sql` and run it in your Supabase SQL editor
+   - Run migrations: Apply all migrations from `supabase/migrations/` in your Supabase SQL editor or run `supabase db push`
 
-4. **Add DAO Twitter accounts:**
+4. **Add Account Twitter accounts:**
    ```sql
-   INSERT INTO dao_twitter_accounts (dao_id, username)
+   INSERT INTO account_twitter_accounts (account_id, username)
    VALUES 
-     ('your_dao_uuid', 'twitter_username_without_@'),
-     ('another_dao_uuid', 'another_twitter_username');
+     ('your_account_uuid', 'twitter_username_without_@'),
+     ('another_account_uuid', 'another_twitter_username');
    ```
 
 ### Usage
@@ -124,9 +124,9 @@ npm start
 
 ### Tables Created
 
-- **dao_twitter_accounts**: Stores DAO Twitter usernames
-- **dao_twitter_posts**: Stores tweet data and engagement metrics
-- **dao_twitter_sync_status**: Tracks sync status per DAO
+- **account_twitter_accounts**: Stores Account Twitter usernames
+- **account_twitter_posts**: Stores tweet data and engagement metrics
+- **account_twitter_sync_status**: Tracks sync status per Account
 
 ## 🔍 Monitoring
 

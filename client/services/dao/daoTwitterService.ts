@@ -45,27 +45,27 @@ export interface TwitterAnalytics {
   recent_tweets: TwitterPost[];
 }
 
-export class DAOTwitterService {
+export class AccountTwitterService {
   
-  // Get table name for a DAO
-  private getTableName(daoSlug: string): string {
-    return `dao_${daoSlug}_tweets`;
+  // Get table name for an Account
+  private getTableName(accountSlug: string): string {
+    return `account_${accountSlug}_tweets`;
   }
 
-  // Create a new DAO Twitter table
-  async createDAOTwitterTable(daoSlug: string): Promise<void> {
-    const { error } = await supabase.rpc('create_dao_twitter_table', {
-      dao_slug: daoSlug
+  // Create a new Account Twitter table
+  async createAccountTwitterTable(accountSlug: string): Promise<void> {
+    const { error } = await supabase.rpc('create_account_twitter_table', {
+      account_slug: accountSlug
     });
     
     if (error) {
-      throw new Error(`Failed to create Twitter table for ${daoSlug}: ${error.message}`);
+      throw new Error(`Failed to create Twitter table for ${accountSlug}: ${error.message}`);
     }
   }
 
   // Insert Twitter posts for a DAO
-  async insertTwitterPosts(daoSlug: string, posts: TwitterPost[]): Promise<void> {
-    const tableName = this.getTableName(daoSlug);
+  async insertTwitterPosts(accountSlug: string, posts: TwitterPost[]): Promise<void> {
+    const tableName = this.getTableName(accountSlug);
     
     // Transform posts to match database schema
     const transformedPosts = posts.map(post => ({
@@ -105,13 +105,13 @@ export class DAOTwitterService {
       .upsert(transformedPosts, { onConflict: 'id' });
     
     if (error) {
-      throw new Error(`Failed to insert Twitter posts for ${daoSlug}: ${error.message}`);
+      throw new Error(`Failed to insert Twitter posts for ${accountSlug}: ${error.message}`);
     }
   }
 
   // Get Twitter posts for a DAO
   async getTwitterPosts(
-    daoSlug: string, 
+    accountSlug: string, 
     options: {
       limit?: number;
       offset?: number;
@@ -119,7 +119,7 @@ export class DAOTwitterService {
       orderDirection?: 'asc' | 'desc';
     } = {}
   ): Promise<TwitterPost[]> {
-    const tableName = this.getTableName(daoSlug);
+    const tableName = this.getTableName(accountSlug);
     const { 
       limit = 50, 
       offset = 0, 
@@ -134,15 +134,15 @@ export class DAOTwitterService {
       .range(offset, offset + limit - 1);
     
     if (error) {
-      throw new Error(`Failed to fetch Twitter posts for ${daoSlug}: ${error.message}`);
+      throw new Error(`Failed to fetch Twitter posts for ${accountSlug}: ${error.message}`);
     }
     
     return data || [];
   }
 
   // Get Twitter analytics for a DAO
-  async getTwitterAnalytics(daoSlug: string): Promise<TwitterAnalytics> {
-    const tableName = this.getTableName(daoSlug);
+  async getTwitterAnalytics(accountSlug: string): Promise<TwitterAnalytics> {
+    const tableName = this.getTableName(accountSlug);
     
     // Get basic stats
     const { data: stats, error: statsError } = await supabase
@@ -153,7 +153,7 @@ export class DAOTwitterService {
       .not('view_count', 'is', null);
     
     if (statsError) {
-      throw new Error(`Failed to fetch analytics for ${daoSlug}: ${statsError.message}`);
+      throw new Error(`Failed to fetch analytics for ${accountSlug}: ${statsError.message}`);
     }
 
     // Get most liked tweet
@@ -202,11 +202,11 @@ export class DAOTwitterService {
 
   // Search tweets for a DAO
   async searchTwitterPosts(
-    daoSlug: string, 
+    accountSlug: string, 
     query: string, 
     options: { limit?: number } = {}
   ): Promise<TwitterPost[]> {
-    const tableName = this.getTableName(daoSlug);
+    const tableName = this.getTableName(accountSlug);
     const { limit = 50 } = options;
 
     const { data, error } = await supabase
@@ -217,7 +217,7 @@ export class DAOTwitterService {
       .limit(limit);
     
     if (error) {
-      throw new Error(`Failed to search Twitter posts for ${daoSlug}: ${error.message}`);
+      throw new Error(`Failed to search Twitter posts for ${accountSlug}: ${error.message}`);
     }
     
     return data || [];
@@ -225,7 +225,7 @@ export class DAOTwitterService {
 
   // Get engagement metrics over time
   async getEngagementMetrics(
-    daoSlug: string,
+    accountSlug: string,
     days: number = 30
   ): Promise<Array<{
     date: string;
@@ -234,7 +234,7 @@ export class DAOTwitterService {
     total_retweets: number;
     total_views: number;
   }>> {
-    const tableName = this.getTableName(daoSlug);
+    const tableName = this.getTableName(accountSlug);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
@@ -245,7 +245,7 @@ export class DAOTwitterService {
       .order('created_at', { ascending: true });
     
     if (error) {
-      throw new Error(`Failed to fetch engagement metrics for ${daoSlug}: ${error.message}`);
+      throw new Error(`Failed to fetch engagement metrics for ${accountSlug}: ${error.message}`);
     }
     
     // Group by date

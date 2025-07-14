@@ -12,14 +12,19 @@ export interface TwitterPost {
   author_id: string;
 }
 
-export interface DAOTwitterAccount {
+export interface AccountTwitterAccount {
   id: string;
   username: string;
-  dao_id: string;
+  account_id: string;
 }
 
 export interface TwitterSyncStatus {
-  dao_id: string;
+  account_id: string;
   last_tweet_id: string | null;
   last_sync_time: string;
+}
+
+// Keep the old interface for backwards compatibility
+export interface DAOTwitterAccount extends AccountTwitterAccount {
+  dao_id: string;
 } 

@@ -21,50 +21,50 @@ export async function setupTwitterSync() {
   }
 }
 
-// Example: How to manually add DAO Twitter accounts
-export async function addDAOTwitterAccount(daoId: string, twitterUsername: string) {
+// Example: How to manually add Account Twitter accounts
+export async function addAccountTwitterAccount(accountId: string, twitterUsername: string) {
   try {
     const { data, error } = await supabase
-      .from('dao_twitter_accounts')
+      .from('account_twitter_accounts')
       .insert({
-        dao_id: daoId,
+        account_id: accountId,
         username: twitterUsername
       })
       .select();
 
     if (error) throw error;
     
-    console.log(`Added Twitter account @${twitterUsername} for DAO ${daoId}`);
+    console.log(`Added Twitter account @${twitterUsername} for Account ${accountId}`);
     return data;
   } catch (error) {
-    console.error('Error adding DAO Twitter account:', error);
+    console.error('Error adding Account Twitter account:', error);
     throw error;
   }
 }
 
-// Example: How to get Twitter data for a specific DAO
-export async function getDAOTwitterData(daoId: string) {
+// Example: How to get Twitter data for a specific Account
+export async function getAccountTwitterData(accountId: string) {
   try {
     const { data, error } = await supabase
-      .from('dao_twitter_posts')
+      .from('account_twitter_posts')
       .select('*')
-      .eq('dao_id', daoId)
+      .eq('account_id', accountId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
     
     return data;
   } catch (error) {
-    console.error('Error fetching DAO Twitter data:', error);
+    console.error('Error fetching Account Twitter data:', error);
     throw error;
   }
 }
 
-// Example: How to get engagement metrics for a DAO
-export async function getDAOEngagementMetrics(daoId: string) {
+// Example: How to get engagement metrics for an Account
+export async function getAccountEngagementMetrics(accountId: string) {
   try {
     const { data, error } = await supabase
-      .from('dao_twitter_posts')
+      .from('account_twitter_posts')
       .select(`
         retweet_count,
         reply_count,
@@ -72,7 +72,7 @@ export async function getDAOEngagementMetrics(daoId: string) {
         quote_count,
         created_at
       `)
-      .eq('dao_id', daoId);
+      .eq('account_id', accountId);
 
     if (error) throw error;
 
@@ -98,4 +98,9 @@ export async function getDAOEngagementMetrics(daoId: string) {
     console.error('Error calculating engagement metrics:', error);
     throw error;
   }
-} 
+}
+
+// Backward compatibility functions
+export const addDAOTwitterAccount = addAccountTwitterAccount;
+export const getDAOTwitterData = getAccountTwitterData;
+export const getDAOEngagementMetrics = getAccountEngagementMetrics; 
