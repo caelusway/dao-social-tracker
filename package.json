@@ -30,6 +30,9 @@
     "engagement:sync": "tsx client/examples/engagement-sync-example.ts",
     "sync:followers": "tsx client/scripts/sync-follower-counts.ts",
     "test:followers": "tsx client/examples/follower-tracking-example.ts",
+    "growth:analytics": "tsx client/scripts/follower-growth-analytics.ts",
+    "populate:growth": "tsx client/scripts/populate-growth-data.ts",
+    "test:growth": "tsx client/scripts/test-new-growth-system.ts",
     "engagement:setup": "tsx client/scripts/setup-engagement-sync.ts setup",
     "engagement:health": "tsx client/scripts/setup-engagement-sync.ts health",
     "debug:tweets": "tsx client/scripts/debug-tweet-data.ts"

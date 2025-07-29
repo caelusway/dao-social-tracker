@@ -15,6 +15,47 @@ export interface TwitterUserInfo {
   };
 }
 
+export interface FollowerGrowthPeriod {
+  start_date: string;
+  end_date: string;
+  start_followers: number;
+  end_followers: number;
+  growth_count: number;
+  growth_percentage: number;
+}
+
+export interface WeeklyGrowth extends FollowerGrowthPeriod {
+  week_start_date: string;
+  week_end_date: string;
+}
+
+export interface MonthlyGrowth extends FollowerGrowthPeriod {
+  month_start_date: string;
+  month_end_date: string;
+}
+
+export interface YearlyGrowth extends FollowerGrowthPeriod {
+  year_start_date: string;
+  year_end_date: string;
+}
+
+export interface GrowthSummary {
+  period_type: 'weekly' | 'monthly' | 'yearly';
+  recent_growth_count: number;
+  recent_growth_percentage: number;
+  average_growth_count: number;
+  average_growth_percentage: number;
+}
+
+export interface TopGrowingAccount {
+  account_id: string;
+  account_name: string;
+  twitter_handle: string;
+  total_growth: number;
+  average_growth_percentage: number;
+  current_followers: number;
+}
+
 export class TwitterFollowerService {
   private apiClient: AxiosInstance;
   private rateLimitCounter: number = 0;
@@ -93,9 +134,30 @@ export class TwitterFollowerService {
   }
 
   /**
-   * Update follower count for a specific account
+   * Update follower count for a specific account (with automatic growth calculation)
    */
   async updateAccountFollowerCount(accountId: string, followerCount: number): Promise<void> {
+    try {
+      const { error } = await supabase.rpc('update_account_follower_count_with_auto_growth', {
+        p_account_id: accountId,
+        p_new_follower_count: followerCount
+      });
+
+      if (error) {
+        throw new Error(`Failed to update follower count: ${error.message}`);
+      }
+
+      console.log(`✅ Updated follower count with auto-growth calculation for account ${accountId}: ${followerCount}`);
+    } catch (error: any) {
+      console.error(`❌ Error updating follower count for account ${accountId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Update follower count only (without growth calculation for bulk operations)
+   */
+  async updateAccountFollowerCountOnly(accountId: string, followerCount: number): Promise<void> {
     try {
       const { error } = await supabase.rpc('update_account_follower_count', {
         p_account_id: accountId,
@@ -163,7 +225,7 @@ export class TwitterFollowerService {
           userInfoMap.set(user.username.toLowerCase(), user);
         });
 
-        // Update each account in the batch
+        // Update each account in the batch (growth will be auto-calculated by trigger)
         for (const account of batch) {
           if (!account.twitter_handle) continue;
           
@@ -194,6 +256,8 @@ export class TwitterFollowerService {
     }
 
     console.log(`✅ Follower count update completed! Success: ${success}, Errors: ${errors}`);
+    console.log('📈 Growth metrics automatically calculated by database triggers');
+    
     return { success, errors };
   }
 
@@ -273,6 +337,253 @@ export class TwitterFollowerService {
     } catch (error: any) {
       console.error('Error fetching accounts needing update:', error.message);
       return [];
+    }
+  }
+
+  /**
+   * Get weekly follower growth for an account
+   */
+  async getWeeklyFollowerGrowth(accountId: string, weeksBack: number = 4): Promise<WeeklyGrowth[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_weekly_follower_growth', {
+        p_account_id: accountId,
+        p_weeks_back: weeksBack
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching weekly growth for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get monthly follower growth for an account
+   */
+  async getMonthlyFollowerGrowth(accountId: string, monthsBack: number = 12): Promise<MonthlyGrowth[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_monthly_follower_growth', {
+        p_account_id: accountId,
+        p_months_back: monthsBack
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching monthly growth for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get yearly follower growth for an account
+   */
+  async getYearlyFollowerGrowth(accountId: string, yearsBack: number = 3): Promise<YearlyGrowth[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_yearly_follower_growth', {
+        p_account_id: accountId,
+        p_years_back: yearsBack
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching yearly growth for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get growth summary across all time periods for an account
+   */
+  async getAccountGrowthSummary(accountId: string): Promise<GrowthSummary[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_account_growth_summary', {
+        p_account_id: accountId
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching growth summary for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get top growing accounts by period
+   */
+  async getTopGrowingAccounts(
+    periodType: 'weekly' | 'monthly' | 'yearly' = 'monthly', 
+    limit: number = 10
+  ): Promise<TopGrowingAccount[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_top_growing_accounts', {
+        p_period_type: periodType,
+        p_limit: limit
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching top growing accounts for ${periodType}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get comprehensive growth analytics for an account
+   */
+  async getComprehensiveGrowthAnalytics(accountId: string): Promise<{
+    summary: GrowthSummary[];
+    weekly: WeeklyGrowth[];
+    monthly: MonthlyGrowth[];
+    yearly: YearlyGrowth[];
+  }> {
+    try {
+      const [summary, weekly, monthly, yearly] = await Promise.all([
+        this.getAccountGrowthSummary(accountId),
+        this.getWeeklyFollowerGrowth(accountId, 8), // Last 8 weeks
+        this.getMonthlyFollowerGrowth(accountId, 12), // Last 12 months
+        this.getYearlyFollowerGrowth(accountId, 3) // Last 3 years
+      ]);
+
+      return {
+        summary,
+        weekly,
+        monthly,
+        yearly
+      };
+    } catch (error: any) {
+      console.error(`Error fetching comprehensive growth analytics for account ${accountId}:`, error.message);
+      return {
+        summary: [],
+        weekly: [],
+        monthly: [],
+        yearly: []
+      };
+    }
+  }
+
+  /**
+   * Update growth periods for a specific account
+   */
+  async updateAccountGrowthPeriods(accountId: string): Promise<void> {
+    try {
+      const { error } = await supabase.rpc('update_account_growth_periods', {
+        p_account_id: accountId
+      });
+
+      if (error) {
+        throw new Error(`Failed to update growth periods: ${error.message}`);
+      }
+
+      console.log(`✅ Growth periods updated for account ${accountId}`);
+    } catch (error: any) {
+      console.error(`❌ Error updating growth periods for account ${accountId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get growth metrics for an account by period type
+   */
+  async getAccountGrowthMetrics(
+    accountId: string, 
+    periodType?: 'daily' | 'weekly' | 'monthly' | 'yearly',
+    limit: number = 10
+  ): Promise<any[]> {
+    try {
+      let query = supabase
+        .from('account_growth_metrics')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('period_start', { ascending: false })
+        .limit(limit);
+
+      if (periodType) {
+        query = query.eq('period_type', periodType);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching growth metrics for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get latest growth metrics for all accounts (from the view)
+   */
+  async getLatestGrowthMetrics(periodType?: 'daily' | 'weekly' | 'monthly' | 'yearly'): Promise<any[]> {
+    try {
+      let query = supabase
+        .from('account_latest_growth')
+        .select('*')
+        .order('follower_count', { ascending: false });
+
+      if (periodType) {
+        query = query.eq('period_type', periodType);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error('Error fetching latest growth metrics:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get top growing accounts by period
+   */
+  async getTopGrowingAccountsByPeriod(
+    periodType: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'monthly',
+    limit: number = 10
+  ): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('account_latest_growth')
+        .select('*')
+        .eq('period_type', periodType)
+        .order('growth_count', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching top growing accounts for ${periodType}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get comprehensive growth data for an account
+   */
+  async getAccountComprehensiveGrowth(accountId: string): Promise<{
+    daily: any[];
+    weekly: any[];
+    monthly: any[];
+    yearly: any[];
+  }> {
+    try {
+      const [daily, weekly, monthly, yearly] = await Promise.all([
+        this.getAccountGrowthMetrics(accountId, 'daily', 30),
+        this.getAccountGrowthMetrics(accountId, 'weekly', 12),
+        this.getAccountGrowthMetrics(accountId, 'monthly', 12),
+        this.getAccountGrowthMetrics(accountId, 'yearly', 3)
+      ]);
+
+      return { daily, weekly, monthly, yearly };
+    } catch (error: any) {
+      console.error(`Error fetching comprehensive growth for account ${accountId}:`, error.message);
+      return { daily: [], weekly: [], monthly: [], yearly: [] };
     }
   }
 }
