@@ -42,22 +42,29 @@ class ProductionSyncServer {
       // Validate environment
       await this.validateEnvironment();
       
-      // Initialize sync service
-      this.syncService = new EngagementSyncService(CONFIG.TWITTER_BEARER_TOKEN!, {
-        daysToLookBack: CONFIG.DAYS_TO_LOOK_BACK,
-        syncIntervalHours: CONFIG.SYNC_INTERVAL_HOURS,
-        maxRequestsPerBatch: CONFIG.MAX_REQUESTS_PER_BATCH
-      });
+      // Initialize services only if Twitter token is available
+      if (CONFIG.TWITTER_BEARER_TOKEN) {
+        // Initialize sync service
+        this.syncService = new EngagementSyncService(CONFIG.TWITTER_BEARER_TOKEN, {
+          daysToLookBack: CONFIG.DAYS_TO_LOOK_BACK,
+          syncIntervalHours: CONFIG.SYNC_INTERVAL_HOURS,
+          maxRequestsPerBatch: CONFIG.MAX_REQUESTS_PER_BATCH
+        });
 
-      // Initialize follower sync service
-      this.followerService = new TwitterFollowerService(CONFIG.TWITTER_BEARER_TOKEN!);
-      this.accountService = new AccountService();
+        // Initialize follower sync service
+        this.followerService = new TwitterFollowerService(CONFIG.TWITTER_BEARER_TOKEN);
 
-      // Start automatic sync
-      this.syncService.startAutomaticSync();
+        // Start automatic sync
+        this.syncService.startAutomaticSync();
+        
+        // Start follower sync (daily)
+        this.startFollowerSync();
+      } else {
+        this.logger.warn('⚠️ Twitter services disabled - no bearer token provided');
+      }
       
-      // Start follower sync (daily)
-      this.startFollowerSync();
+      // Initialize account service (always needed)
+      this.accountService = new AccountService();
       
       // Setup health check endpoint
       this.setupHealthCheck();
@@ -66,10 +73,15 @@ class ProductionSyncServer {
       this.setupGracefulShutdown();
       
       this.logger.info(`✅ Server started successfully on port ${CONFIG.PORT}`);
-      this.logger.info(`📊 Sync interval: ${CONFIG.SYNC_INTERVAL_HOURS} hours`);
-      this.logger.info(`👥 Follower sync interval: ${CONFIG.FOLLOWER_SYNC_INTERVAL_HOURS} hours`);
-      this.logger.info(`🔍 Days to look back: ${CONFIG.DAYS_TO_LOOK_BACK}`);
-      this.logger.info(`📦 Max requests per batch: ${CONFIG.MAX_REQUESTS_PER_BATCH}`);
+      
+      if (CONFIG.TWITTER_BEARER_TOKEN) {
+        this.logger.info(`📊 Sync interval: ${CONFIG.SYNC_INTERVAL_HOURS} hours`);
+        this.logger.info(`👥 Follower sync interval: ${CONFIG.FOLLOWER_SYNC_INTERVAL_HOURS} hours`);
+        this.logger.info(`🔍 Days to look back: ${CONFIG.DAYS_TO_LOOK_BACK}`);
+        this.logger.info(`📦 Max requests per batch: ${CONFIG.MAX_REQUESTS_PER_BATCH}`);
+      } else {
+        this.logger.info(`📊 Running in health-check only mode - Twitter sync disabled`);
+      }
 
     } catch (error) {
       this.logger.error('❌ Failed to start server', error);
@@ -113,12 +125,18 @@ class ProductionSyncServer {
   private async validateEnvironment() {
     const missing: string[] = [];
     
-    if (!CONFIG.TWITTER_BEARER_TOKEN) missing.push('TWITTER_BEARER_TOKEN');
+    // TWITTER_BEARER_TOKEN is optional for basic health checks
     if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
     if (!process.env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
     
     if (missing.length > 0) {
+      this.logger.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
       throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+
+    // Warn about optional variables
+    if (!CONFIG.TWITTER_BEARER_TOKEN) {
+      this.logger.warn('⚠️ TWITTER_BEARER_TOKEN not set - Twitter sync will be disabled');
     }
 
     this.logger.info('✅ Environment validation passed');
@@ -128,19 +146,46 @@ class ProductionSyncServer {
     const http = require('http');
     
     const server = http.createServer((req: any, res: any) => {
+      // Add CORS headers for Railway health checks
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+      }
+      
       if (req.url === '/health') {
         this.handleHealthCheck(res);
       } else if (req.url === '/status') {
         this.handleStatusCheck(res);
       } else if (req.url === '/metrics') {
         this.handleMetrics(res);
+      } else if (req.url === '/' || req.url === '') {
+        // Root endpoint for Railway health check
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          service: 'dao-tracker', 
+          status: 'running',
+          timestamp: new Date().toISOString()
+        }));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
       }
     });
 
-    server.listen(CONFIG.PORT, () => {
+    server.on('error', (error: any) => {
+      this.logger.error('❌ Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        this.logger.error(`Port ${CONFIG.PORT} is already in use`);
+        process.exit(1);
+      }
+    });
+
+    server.listen(CONFIG.PORT, '0.0.0.0', () => {
       this.logger.info(`🩺 Health check server running on port ${CONFIG.PORT}`);
     });
   }
@@ -154,18 +199,30 @@ class ProductionSyncServer {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
+        twitterEnabled: !!CONFIG.TWITTER_BEARER_TOKEN,
         sync: {
           isRunning: status?.isRunning || false,
-          isAutomatic: status?.isAutomatic || false
+          isAutomatic: status?.isAutomatic || false,
+          enabled: !!this.syncService
         },
         followerSync: {
           isRunning: this.followerSyncInterval !== null,
-          intervalHours: CONFIG.FOLLOWER_SYNC_INTERVAL_HOURS
+          intervalHours: CONFIG.FOLLOWER_SYNC_INTERVAL_HOURS,
+          enabled: !!this.followerService
+        },
+        environment: {
+          supabaseConfigured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+          port: CONFIG.PORT
         }
       }));
     } catch (error) {
+      this.logger.error('Health check failed:', error);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'unhealthy', error: String(error) }));
+      res.end(JSON.stringify({ 
+        status: 'unhealthy', 
+        error: String(error),
+        timestamp: new Date().toISOString()
+      }));
     }
   }
 
