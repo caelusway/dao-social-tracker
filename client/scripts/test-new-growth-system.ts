@@ -37,6 +37,11 @@ class NewGrowthSystemTester {
       }
 
       const testAccount = accounts[0];
+      if (!testAccount) {
+        console.log('❌ No test account available');
+        return;
+      }
+      
       console.log(`📊 Testing with account: ${testAccount.name} (@${testAccount.twitter_handle})`);
       console.log(`Current followers: ${testAccount.follower_count?.toLocaleString() || 'N/A'}`);
 

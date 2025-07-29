@@ -39,9 +39,22 @@ class GrowthDataPopulator {
         return;
       }
 
-      // Calculate growth metrics for all accounts
-      console.log('\n🔄 Calculating growth metrics...');
-      const result = await this.followerService.updateAllGrowthMetrics();
+      // Update growth periods for all accounts
+      console.log('\n🔄 Updating growth periods for all accounts...');
+      let success = 0;
+      let errors = 0;
+      
+      for (const account of accounts) {
+        try {
+          await this.followerService.updateAccountGrowthPeriods(account.id);
+          success++;
+        } catch (error) {
+          console.error(`Failed to update growth for ${account.name}:`, error);
+          errors++;
+        }
+      }
+      
+      const result = { updated: success, errors };
 
       console.log('\n📈 Growth Data Population Results:');
       console.log(`✅ Successfully calculated: ${result.updated} accounts`);
@@ -67,24 +80,30 @@ class GrowthDataPopulator {
       console.log('━'.repeat(60));
 
       // Get accounts with growth data
-      const accountsWithGrowth = await this.followerService.getAccountsWithGrowthData();
+      const accountsWithGrowth = await this.followerService.getLatestGrowthMetrics();
       
       if (accountsWithGrowth.length === 0) {
         console.log('⚠️ No accounts found with growth data.');
         return;
       }
 
-      // Show top 5 accounts by follower count with their growth data
-      console.log('\n🏆 TOP 5 ACCOUNTS WITH GROWTH DATA:');
+      // Group by account and show sample data
+      console.log('\n🏆 SAMPLE ACCOUNTS WITH GROWTH DATA:');
       console.log('─'.repeat(50));
       
-      accountsWithGrowth.slice(0, 5).forEach((account, index) => {
+      const uniqueAccounts = accountsWithGrowth.reduce((acc: any[], account: any) => {
+        if (!acc.find((a: any) => a.account_id === account.account_id)) {
+          acc.push(account);
+        }
+        return acc;
+      }, []);
+      
+      uniqueAccounts.slice(0, 5).forEach((account: any, index: number) => {
         console.log(`${index + 1}. ${account.name} (@${account.twitter_handle})`);
         console.log(`   Current: ${account.follower_count?.toLocaleString() || 'N/A'} followers`);
-        console.log(`   Weekly: ${account.weekly_growth > 0 ? '+' : ''}${account.weekly_growth} (${account.weekly_growth_percentage}%)`);
-        console.log(`   Monthly: ${account.monthly_growth > 0 ? '+' : ''}${account.monthly_growth} (${account.monthly_growth_percentage}%)`);
-        console.log(`   Yearly: ${account.yearly_growth > 0 ? '+' : ''}${account.yearly_growth} (${account.yearly_growth_percentage}%)`);
-        console.log(`   Last Updated: ${account.growth_calculated_at ? new Date(account.growth_calculated_at).toLocaleString() : 'Never'}`);
+        console.log(`   Period: ${account.period_type} (${account.period_start} to ${account.period_end})`);
+        console.log(`   Growth: ${account.growth_count > 0 ? '+' : ''}${account.growth_count} (${account.growth_percentage}%)`);
+        console.log(`   Last Updated: ${account.calculated_at ? new Date(account.calculated_at).toLocaleString() : 'Never'}`);
         console.log('');
       });
 
@@ -95,13 +114,13 @@ class GrowthDataPopulator {
       const periods: Array<'weekly' | 'monthly' | 'yearly'> = ['weekly', 'monthly', 'yearly'];
       
       for (const period of periods) {
-        const topGrowing = await this.followerService.getTopAccountsByGrowth(period, 3);
+        const topGrowing = await this.followerService.getTopGrowingAccountsByPeriod(period, 3);
         
         if (topGrowing.length > 0) {
           console.log(`\n🚀 Top 3 ${period.toUpperCase()} Growth:`);
-          topGrowing.forEach((account, index) => {
-            const growth = account[`${period}_growth`];
-            const growthPct = account[`${period}_growth_percentage`];
+          topGrowing.forEach((account: any, index: number) => {
+            const growth = account.growth_count;
+            const growthPct = account.growth_percentage;
             const emoji = growth > 0 ? '📈' : growth < 0 ? '📉' : '➖';
             console.log(`  ${index + 1}. ${emoji} ${account.name}: ${growth > 0 ? '+' : ''}${growth} (${growthPct}%)`);
           });
@@ -112,13 +131,14 @@ class GrowthDataPopulator {
       console.log('\n📊 GROWTH TREND SUMMARY:');
       console.log('─'.repeat(40));
       
-      const growingWeekly = accountsWithGrowth.filter(a => a.weekly_growth > 0).length;
-      const growingMonthly = accountsWithGrowth.filter(a => a.monthly_growth > 0).length;
-      const growingYearly = accountsWithGrowth.filter(a => a.yearly_growth > 0).length;
+      const growingAccounts = accountsWithGrowth.filter((a: any) => a.growth_count > 0).length;
+      const decliningAccounts = accountsWithGrowth.filter((a: any) => a.growth_count < 0).length;
+      const stableAccounts = accountsWithGrowth.filter((a: any) => a.growth_count === 0).length;
       
-      console.log(`📅 Growing Weekly: ${growingWeekly}/${accountsWithGrowth.length} accounts`);
-      console.log(`🗓️ Growing Monthly: ${growingMonthly}/${accountsWithGrowth.length} accounts`);
-      console.log(`📆 Growing Yearly: ${growingYearly}/${accountsWithGrowth.length} accounts`);
+      console.log(`📈 Growing: ${growingAccounts} records`);
+      console.log(`📉 Declining: ${decliningAccounts} records`);
+      console.log(`➖ Stable: ${stableAccounts} records`);
+      console.log(`📊 Total growth records: ${accountsWithGrowth.length}`);
 
     } catch (error: any) {
       console.error('❌ Error showing sample results:', error.message);
@@ -140,18 +160,17 @@ class GrowthDataPopulator {
 
       console.log(`🔄 Recalculating growth data for: ${account.name} (@${account.twitter_handle})`);
       
-      await this.followerService.calculateAccountGrowth(accountId);
+      await this.followerService.updateAccountGrowthPeriods(accountId);
       
       // Show updated data
-      const updatedAccounts = await this.followerService.getAccountsWithGrowthData();
-      const updatedAccount = updatedAccounts.find(acc => acc.id === accountId);
+      const updatedAccounts = await this.followerService.getAccountGrowthMetrics(accountId);
+      const updatedAccount = updatedAccounts[0];
       
       if (updatedAccount) {
         console.log('\n📈 Updated Growth Data:');
-        console.log(`Weekly: ${updatedAccount.weekly_growth > 0 ? '+' : ''}${updatedAccount.weekly_growth} (${updatedAccount.weekly_growth_percentage}%)`);
-        console.log(`Monthly: ${updatedAccount.monthly_growth > 0 ? '+' : ''}${updatedAccount.monthly_growth} (${updatedAccount.monthly_growth_percentage}%)`);
-        console.log(`Yearly: ${updatedAccount.yearly_growth > 0 ? '+' : ''}${updatedAccount.yearly_growth} (${updatedAccount.yearly_growth_percentage}%)`);
-        console.log(`Last Updated: ${new Date(updatedAccount.growth_calculated_at).toLocaleString()}`);
+        console.log(`Period: ${updatedAccount.period_type} (${updatedAccount.period_start} to ${updatedAccount.period_end})`);
+        console.log(`Growth: ${updatedAccount.growth_count > 0 ? '+' : ''}${updatedAccount.growth_count} (${updatedAccount.growth_percentage}%)`);
+        console.log(`Last Updated: ${new Date(updatedAccount.calculated_at).toLocaleString()}`);
       }
       
       console.log('✅ Growth data recalculated successfully!');
@@ -171,21 +190,26 @@ class GrowthDataPopulator {
 
       const allAccounts = await this.accountService.getAllAccounts();
       const accountsWithTwitter = allAccounts.filter(acc => acc.twitter_handle);
-      const accountsWithGrowth = await this.followerService.getAccountsWithGrowthData();
+      const accountsWithGrowth = await this.followerService.getLatestGrowthMetrics();
 
       console.log(`📈 Total accounts: ${allAccounts.length}`);
       console.log(`🐦 Accounts with Twitter handles: ${accountsWithTwitter.length}`);
       console.log(`📊 Accounts with growth data: ${accountsWithGrowth.length}`);
       console.log(`⚠️ Missing growth data: ${accountsWithTwitter.length - accountsWithGrowth.length}`);
 
+      // Show unique accounts with growth data
+      const uniqueAccountIds = [...new Set(accountsWithGrowth.map((a: any) => a.account_id))];
+      console.log(`📊 Unique accounts with growth data: ${uniqueAccountIds.length}`);
+      console.log(`⚠️ Missing growth data: ${accountsWithTwitter.length - uniqueAccountIds.length}`);
+
       // Show accounts that need growth data calculation
       const needsCalculation = accountsWithTwitter.filter(account => 
-        !accountsWithGrowth.find(growthAccount => growthAccount.id === account.id)
+        !uniqueAccountIds.includes(account.id)
       );
 
       if (needsCalculation.length > 0) {
         console.log('\n⚠️ ACCOUNTS MISSING GROWTH DATA:');
-        needsCalculation.slice(0, 5).forEach((account, index) => {
+        needsCalculation.slice(0, 5).forEach((account: any, index: number) => {
           console.log(`${index + 1}. ${account.name} (@${account.twitter_handle})`);
         });
         if (needsCalculation.length > 5) {
@@ -197,14 +221,14 @@ class GrowthDataPopulator {
       // Show data freshness
       if (accountsWithGrowth.length > 0) {
         const now = new Date();
-        const recentUpdates = accountsWithGrowth.filter(account => {
-          if (!account.growth_calculated_at) return false;
-          const updateTime = new Date(account.growth_calculated_at);
+        const recentUpdates = accountsWithGrowth.filter((account: any) => {
+          if (!account.calculated_at) return false;
+          const updateTime = new Date(account.calculated_at);
           const hoursDiff = (now.getTime() - updateTime.getTime()) / (1000 * 60 * 60);
           return hoursDiff < 24;
         });
 
-        console.log(`\n⏰ Updated in last 24 hours: ${recentUpdates.length}/${accountsWithGrowth.length} accounts`);
+        console.log(`\n⏰ Updated in last 24 hours: ${recentUpdates.length}/${accountsWithGrowth.length} records`);
       }
 
     } catch (error: any) {
