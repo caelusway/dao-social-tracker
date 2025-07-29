@@ -28,8 +28,26 @@ USER nodejs
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "
+    const http = require('http');
+    const options = {
+      host: 'localhost',
+      port: process.env.PORT || 3000,
+      path: '/health',
+      timeout: 2000,
+    };
+    const request = http.request(options, (res) => {
+      console.log(\`STATUS: \${res.statusCode}\`);
+      process.exitCode = (res.statusCode === 200) ? 0 : 1;
+      process.exit();
+    });
+    request.on('error', function(err) {
+      console.log('ERROR');
+      process.exit(1);
+    });
+    request.end();
+  "
 
 # Start application
-CMD ["npm", "run", "start:prod"] 
+CMD ["npm", "run", "railway:start"] 
