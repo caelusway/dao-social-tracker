@@ -134,22 +134,22 @@ export class TwitterFollowerService {
   }
 
   /**
-   * Update follower count for a specific account (with automatic growth calculation)
+   * Update follower count for a specific account (with new daily snapshot system)
    */
   async updateAccountFollowerCount(accountId: string, followerCount: number): Promise<void> {
     try {
-      const { error } = await supabase.rpc('update_account_follower_count_with_auto_growth', {
+      const { error } = await supabase.rpc('record_daily_follower_snapshot', {
         p_account_id: accountId,
-        p_new_follower_count: followerCount
+        p_follower_count: followerCount
       });
 
       if (error) {
-        throw new Error(`Failed to update follower count: ${error.message}`);
+        throw new Error(`Failed to record daily follower snapshot: ${error.message}`);
       }
 
-      console.log(`✅ Updated follower count with auto-growth calculation for account ${accountId}: ${followerCount}`);
+      console.log(`✅ Recorded daily follower snapshot for account ${accountId}: ${followerCount}`);
     } catch (error: any) {
-      console.error(`❌ Error updating follower count for account ${accountId}:`, error.message);
+      console.error(`❌ Error recording follower snapshot for account ${accountId}:`, error.message);
       throw error;
     }
   }
@@ -225,7 +225,7 @@ export class TwitterFollowerService {
           userInfoMap.set(user.username.toLowerCase(), user);
         });
 
-        // Update each account in the batch (growth will be auto-calculated by trigger)
+        // Update each account in the batch (daily snapshots will be recorded)
         for (const account of batch) {
           if (!account.twitter_handle) continue;
           
@@ -256,7 +256,7 @@ export class TwitterFollowerService {
     }
 
     console.log(`✅ Follower count update completed! Success: ${success}, Errors: ${errors}`);
-    console.log('📈 Growth metrics automatically calculated by database triggers');
+    console.log('📈 Daily snapshots recorded with automatic growth calculation');
     
     return { success, errors };
   }
@@ -564,7 +564,7 @@ export class TwitterFollowerService {
   }
 
   /**
-   * Get comprehensive growth data for an account
+   * Get comprehensive growth data for an account (NEW SYSTEM)
    */
   async getAccountComprehensiveGrowth(accountId: string): Promise<{
     daily: any[];
@@ -573,17 +573,94 @@ export class TwitterFollowerService {
     yearly: any[];
   }> {
     try {
-      const [daily, weekly, monthly, yearly] = await Promise.all([
-        this.getAccountGrowthMetrics(accountId, 'daily', 30),
-        this.getAccountGrowthMetrics(accountId, 'weekly', 12),
-        this.getAccountGrowthMetrics(accountId, 'monthly', 12),
-        this.getAccountGrowthMetrics(accountId, 'yearly', 3)
+      const [dailySnapshots, weeklyGrowth, monthlyGrowth, yearlyGrowth] = await Promise.all([
+        this.getAccountDailySnapshots(accountId, 30),
+        this.getAccountGrowthOverDays(accountId, 7),
+        this.getAccountGrowthOverDays(accountId, 30),
+        this.getAccountGrowthOverDays(accountId, 365)
       ]);
 
-      return { daily, weekly, monthly, yearly };
+      return { 
+        daily: dailySnapshots,
+        weekly: weeklyGrowth ? [weeklyGrowth] : [],
+        monthly: monthlyGrowth ? [monthlyGrowth] : [],
+        yearly: yearlyGrowth ? [yearlyGrowth] : []
+      };
     } catch (error: any) {
       console.error(`Error fetching comprehensive growth for account ${accountId}:`, error.message);
       return { daily: [], weekly: [], monthly: [], yearly: [] };
+    }
+  }
+
+  /**
+   * Get daily snapshots for an account (NEW SYSTEM)
+   */
+  async getAccountDailySnapshots(accountId: string, limit: number = 30): Promise<any[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_account_daily_snapshots', {
+        p_account_id: accountId,
+        p_limit: limit
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching daily snapshots for account ${accountId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get growth over specified number of days (NEW SYSTEM)
+   */
+  async getAccountGrowthOverDays(accountId: string, days: number): Promise<any> {
+    try {
+      const { data, error } = await supabase.rpc('get_account_growth_days', {
+        p_account_id: accountId,
+        p_days: days
+      });
+
+      if (error) throw error;
+      return data && data.length > 0 ? data[0] : null;
+    } catch (error: any) {
+      console.error(`Error fetching ${days}-day growth for account ${accountId}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get top growing accounts over period (NEW SYSTEM)
+   */
+  async getTopGrowingAccountsOverDays(days: number = 7, limit: number = 10): Promise<any[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_top_growing_accounts_period', {
+        p_days: days,
+        p_limit: limit
+      });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error(`Error fetching top growing accounts over ${days} days:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get latest snapshots for all accounts (NEW SYSTEM)
+   */
+  async getLatestFollowerSnapshots(): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('latest_follower_snapshots')
+        .select('*')
+        .order('current_followers', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error: any) {
+      console.error('Error fetching latest follower snapshots:', error.message);
+      return [];
     }
   }
 }

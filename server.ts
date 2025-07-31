@@ -119,7 +119,7 @@ class ProductionSyncServer {
     if (!this.followerService || this.isShuttingDown) return;
     
     try {
-      this.logger.info('🔄 Starting follower count sync...');
+      this.logger.info('🔄 Starting daily follower sync with growth tracking...');
       
       const result = await this.followerService.updateAllFollowerCounts();
       
@@ -128,7 +128,35 @@ class ProductionSyncServer {
       if (result.success > 0) {
         // Log top accounts for monitoring
         const topAccounts = await this.followerService.getTopAccountsByFollowers(3);
-        this.logger.info(`🏆 Top accounts: ${topAccounts.map(a => `${a.name} (${a.follower_count})`).join(', ')}`);
+        this.logger.info(`🏆 Top accounts: ${topAccounts.map(a => `${a.name} (${a.follower_count?.toLocaleString()})`).join(', ')}`);
+        
+        // Log recent growth from new system
+        try {
+          const topDaily = await this.followerService.getTopGrowingAccountsOverDays(1, 3);
+          const topWeekly = await this.followerService.getTopGrowingAccountsOverDays(7, 3);
+          
+          if (topDaily.length > 0) {
+            const dailyGrowthStr = topDaily
+              .filter(g => g.growth_amount !== 0)
+              .map(g => `${g.account_name} (${g.growth_amount > 0 ? '+' : ''}${g.growth_amount})`)
+              .join(', ');
+            if (dailyGrowthStr) {
+              this.logger.info(`📈 Daily growth: ${dailyGrowthStr}`);
+            }
+          }
+          
+          if (topWeekly.length > 0) {
+            const weeklyGrowthStr = topWeekly
+              .filter(g => g.growth_amount !== 0)
+              .map(g => `${g.account_name} (${g.growth_amount > 0 ? '+' : ''}${g.growth_amount})`)
+              .join(', ');
+            if (weeklyGrowthStr) {
+              this.logger.info(`📊 Weekly growth: ${weeklyGrowthStr}`);
+            }
+          }
+        } catch (growthError) {
+          this.logger.warn('⚠️ Could not fetch growth metrics for logging:', growthError);
+        }
       }
     } catch (error) {
       this.logger.error('❌ Follower sync failed', error);

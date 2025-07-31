@@ -22,7 +22,7 @@ class FollowerGrowthAnalyticsManager {
   }
 
   /**
-   * Show comprehensive growth analytics for a specific account
+   * Show comprehensive growth analytics for a specific account (NEW SYSTEM)
    */
   async showAccountGrowthAnalytics(accountId?: string): Promise<void> {
     try {
@@ -54,54 +54,50 @@ class FollowerGrowthAnalyticsManager {
       console.log(`📊 Current Followers: ${targetAccount.follower_count?.toLocaleString() || 'N/A'}`);
       console.log('─'.repeat(80));
 
-      // Get comprehensive analytics
-      const analytics = await this.followerService.getAccountComprehensiveGrowth(targetAccount.id);
+      // Get daily snapshots and growth data
+      const [dailySnapshots, weeklyGrowth, monthlyGrowth, yearlyGrowth] = await Promise.all([
+        this.followerService.getAccountDailySnapshots(targetAccount.id, 30),
+        this.followerService.getAccountGrowthOverDays(targetAccount.id, 7),
+        this.followerService.getAccountGrowthOverDays(targetAccount.id, 30),
+        this.followerService.getAccountGrowthOverDays(targetAccount.id, 365)
+      ]);
 
       // Display Growth Summary
       console.log('\n📈 GROWTH SUMMARY');
       console.log('─'.repeat(40));
-      // Display Weekly Growth
-      console.log('\n📅 WEEKLY GROWTH (Last 8 Weeks)');
-      console.log('─'.repeat(60));
-      if (analytics.weekly.length > 0) {
-        analytics.weekly.forEach((week: any, index: number) => {
-          const growthEmoji = week.growth_count > 0 ? '📈' : week.growth_count < 0 ? '📉' : '➖';
-          console.log(`${growthEmoji} Week ${index + 1} (${week.period_start} to ${week.period_end})`);
-          console.log(`  ${week.start_followers.toLocaleString()} → ${week.end_followers.toLocaleString()} followers`);
-          console.log(`  Change: ${week.growth_count > 0 ? '+' : ''}${week.growth_count} (${week.growth_percentage}%)`);
-        });
-      } else {
-        console.log('⚠️ No weekly data available.');
+      
+      if (weeklyGrowth) {
+        const growthEmoji = weeklyGrowth.total_change > 0 ? '📈' : weeklyGrowth.total_change < 0 ? '📉' : '➖';
+        console.log(`${growthEmoji} Last 7 days: ${weeklyGrowth.total_change > 0 ? '+' : ''}${weeklyGrowth.total_change} (${weeklyGrowth.percentage_change}%)`);
+      }
+      
+      if (monthlyGrowth) {
+        const growthEmoji = monthlyGrowth.total_change > 0 ? '📈' : monthlyGrowth.total_change < 0 ? '📉' : '➖';
+        console.log(`${growthEmoji} Last 30 days: ${monthlyGrowth.total_change > 0 ? '+' : ''}${monthlyGrowth.total_change} (${monthlyGrowth.percentage_change}%)`);
+      }
+      
+      if (yearlyGrowth) {
+        const growthEmoji = yearlyGrowth.total_change > 0 ? '📈' : yearlyGrowth.total_change < 0 ? '📉' : '➖';
+        console.log(`${growthEmoji} Last 365 days: ${yearlyGrowth.total_change > 0 ? '+' : ''}${yearlyGrowth.total_change} (${yearlyGrowth.percentage_change}%)`);
       }
 
-      // Display Monthly Growth
-      console.log('\n🗓️ MONTHLY GROWTH (Last 12 Months)');
+      // Display Recent Daily Activity
+      console.log('\n📅 DAILY ACTIVITY (Last 14 days)');
       console.log('─'.repeat(60));
-      if (analytics.monthly.length > 0) {
-        analytics.monthly.forEach((month: any, index: number) => {
-          const growthEmoji = month.growth_count > 0 ? '📈' : month.growth_count < 0 ? '📉' : '➖';
-          const monthName = new Date(month.period_start).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-          console.log(`${growthEmoji} ${monthName}`);
-          console.log(`  ${month.start_followers.toLocaleString()} → ${month.end_followers.toLocaleString()} followers`);
-          console.log(`  Change: ${month.growth_count > 0 ? '+' : ''}${month.growth_count} (${month.growth_percentage}%)`);
+      if (dailySnapshots.length > 0) {
+        dailySnapshots.slice(0, 14).forEach((day: any) => {
+          const date = new Date(day.date).toLocaleDateString();
+          const changeEmoji = day.change_from_previous > 0 ? '📈' : day.change_from_previous < 0 ? '📉' : '➖';
+          console.log(`${changeEmoji} ${date}: ${day.follower_count.toLocaleString()} followers (${day.change_from_previous > 0 ? '+' : ''}${day.change_from_previous})`);
         });
       } else {
-        console.log('⚠️ No monthly data available.');
+        console.log('⚠️ No daily data available. Run follower sync to start collecting data.');
       }
 
-      // Display Yearly Growth
-      console.log('\n📆 YEARLY GROWTH (Last 3 Years)');
-      console.log('─'.repeat(60));
-      if (analytics.yearly.length > 0) {
-        analytics.yearly.forEach((year: any, index: number) => {
-          const growthEmoji = year.growth_count > 0 ? '📈' : year.growth_count < 0 ? '📉' : '➖';
-          const yearLabel = new Date(year.period_start).getFullYear();
-          console.log(`${growthEmoji} ${yearLabel}`);
-          console.log(`  ${year.start_followers.toLocaleString()} → ${year.end_followers.toLocaleString()} followers`);
-          console.log(`  Change: ${year.growth_count > 0 ? '+' : ''}${year.growth_count} (${year.growth_percentage}%)`);
-        });
-      } else {
-        console.log('⚠️ No yearly data available.');
+      // Display Average Daily Change
+      if (dailySnapshots.length > 1) {
+        const avgChange = dailySnapshots.reduce((sum: number, day: any) => sum + (day.change_from_previous || 0), 0) / dailySnapshots.length;
+        console.log(`\n📊 Average daily change: ${avgChange > 0 ? '+' : ''}${avgChange.toFixed(1)} followers`);
       }
 
     } catch (error: any) {
@@ -110,27 +106,31 @@ class FollowerGrowthAnalyticsManager {
   }
 
   /**
-   * Show top growing accounts by different time periods
+   * Show top growing accounts by different time periods (NEW SYSTEM)
    */
   async showTopGrowingAccounts(): Promise<void> {
     try {
       console.log('\n🚀 TOP GROWING ACCOUNTS');
       console.log('═'.repeat(80));
 
-      const periods: Array<'weekly' | 'monthly' | 'yearly'> = ['weekly', 'monthly', 'yearly'];
+      const periods = [
+        { name: 'DAILY', days: 1 },
+        { name: 'WEEKLY', days: 7 },
+        { name: 'MONTHLY', days: 30 }
+      ];
       
       for (const period of periods) {
-        console.log(`\n🏆 TOP 5 GROWING ACCOUNTS (${period.toUpperCase()})`);
+        console.log(`\n🏆 TOP 5 GROWING ACCOUNTS (${period.name})`);
         console.log('─'.repeat(50));
         
-        const topGrowing = await this.followerService.getTopGrowingAccountsByPeriod(period, 5);
+        const topGrowing = await this.followerService.getTopGrowingAccountsOverDays(period.days, 5);
         
         if (topGrowing.length > 0) {
           topGrowing.forEach((account: any, index: number) => {
-            const growthEmoji = account.growth_count > 0 ? '📈' : account.growth_count < 0 ? '📉' : '➖';
-            console.log(`${index + 1}. ${growthEmoji} ${account.name} (@${account.twitter_handle})`);
-            console.log(`   Current: ${account.follower_count.toLocaleString()} followers`);
-            console.log(`   Growth: ${account.growth_count > 0 ? '+' : ''}${account.growth_count} (${account.growth_percentage}%)`);
+            const growthEmoji = account.growth_amount > 0 ? '📈' : account.growth_amount < 0 ? '📉' : '➖';
+            console.log(`${index + 1}. ${growthEmoji} ${account.account_name} (@${account.twitter_handle})`);
+            console.log(`   Current: ${account.current_followers.toLocaleString()} followers`);
+            console.log(`   Growth: ${account.growth_amount > 0 ? '+' : ''}${account.growth_amount} (${account.growth_percentage}%)`);
           });
         } else {
           console.log('⚠️ No growth data available for this period.');
@@ -143,48 +143,68 @@ class FollowerGrowthAnalyticsManager {
   }
 
   /**
-   * Show overall growth statistics across all accounts
+   * Show overall growth statistics across all accounts (NEW SYSTEM)
    */
   async showOverallGrowthStats(): Promise<void> {
     try {
       console.log('\n📊 OVERALL GROWTH STATISTICS');
       console.log('═'.repeat(60));
 
-      const accounts = await this.accountService.getAllAccounts();
-      const accountsWithTwitter = accounts.filter(acc => acc.twitter_handle);
+      const latestSnapshots = await this.followerService.getLatestFollowerSnapshots();
+      const accountsWithTwitter = latestSnapshots.filter(acc => acc.twitter_handle);
 
       console.log(`📈 Total accounts with Twitter handles: ${accountsWithTwitter.length}`);
 
-      // Get growth data for all accounts
-      let totalWeeklyGrowth = 0;
-      let totalMonthlyGrowth = 0;
-      let totalYearlyGrowth = 0;
-      let accountsWithData = 0;
-
-      console.log('\n⏳ Calculating growth across all accounts...');
-
-      for (const account of accountsWithTwitter.slice(0, 10)) { // Limit to first 10 for demo
-        try {
-          const summary = await this.followerService.getAccountGrowthSummary(account.id);
-          if (summary.length > 0) {
-            accountsWithData++;
-            summary.forEach(s => {
-              if (s.period_type === 'weekly') totalWeeklyGrowth += s.recent_growth_count;
-              if (s.period_type === 'monthly') totalMonthlyGrowth += s.recent_growth_count;
-              if (s.period_type === 'yearly') totalYearlyGrowth += s.recent_growth_count;
-            });
-          }
-        } catch (error) {
-          // Skip accounts with errors
-        }
+      if (accountsWithTwitter.length === 0) {
+        console.log('⚠️ No accounts with snapshots yet. Run follower sync first.');
+        return;
       }
 
-      console.log('\n📈 AGGREGATE GROWTH (Sample of 10 accounts):');
+      // Calculate aggregate statistics
+      const totalFollowers = accountsWithTwitter.reduce((sum, acc) => sum + (acc.current_followers || 0), 0);
+      const totalDailyChange = accountsWithTwitter.reduce((sum, acc) => sum + (acc.daily_change || 0), 0);
+      const avgFollowersPerAccount = totalFollowers / accountsWithTwitter.length;
+      const accountsWithGrowth = accountsWithTwitter.filter(acc => (acc.daily_change || 0) > 0).length;
+      const accountsWithDecline = accountsWithTwitter.filter(acc => (acc.daily_change || 0) < 0).length;
+
+      console.log('\n📊 CURRENT STATISTICS:');
       console.log('─'.repeat(50));
-      console.log(`📅 Total Weekly Growth: ${totalWeeklyGrowth > 0 ? '+' : ''}${totalWeeklyGrowth} followers`);
-      console.log(`🗓️ Total Monthly Growth: ${totalMonthlyGrowth > 0 ? '+' : ''}${totalMonthlyGrowth} followers`);
-      console.log(`📆 Total Yearly Growth: ${totalYearlyGrowth > 0 ? '+' : ''}${totalYearlyGrowth} followers`);
-      console.log(`📊 Accounts with growth data: ${accountsWithData}`);
+      console.log(`👥 Total followers across all accounts: ${totalFollowers.toLocaleString()}`);
+      console.log(`📊 Average followers per account: ${Math.round(avgFollowersPerAccount).toLocaleString()}`);
+      console.log(`📈 Accounts growing today: ${accountsWithGrowth}`);
+      console.log(`📉 Accounts declining today: ${accountsWithDecline}`);
+      console.log(`📅 Total daily change: ${totalDailyChange > 0 ? '+' : ''}${totalDailyChange} followers`);
+
+      // Show top accounts by current followers
+      console.log('\n🏆 TOP 5 ACCOUNTS BY FOLLOWERS:');
+      console.log('─'.repeat(50));
+      const topByFollowers = accountsWithTwitter
+        .sort((a, b) => (b.current_followers || 0) - (a.current_followers || 0))
+        .slice(0, 5);
+
+      topByFollowers.forEach((account, index) => {
+        const changeEmoji = (account.daily_change || 0) > 0 ? '📈' : (account.daily_change || 0) < 0 ? '📉' : '➖';
+        console.log(`${index + 1}. ${account.name} (@${account.twitter_handle})`);
+        console.log(`   ${(account.current_followers || 0).toLocaleString()} followers ${changeEmoji} (${account.daily_change > 0 ? '+' : ''}${account.daily_change || 0} today)`);
+      });
+
+      // Show top accounts by daily growth
+      console.log('\n🚀 TOP 5 ACCOUNTS BY TODAY\'S GROWTH:');
+      console.log('─'.repeat(50));
+      const topByGrowth = accountsWithTwitter
+        .filter(acc => (acc.daily_change || 0) !== 0)
+        .sort((a, b) => (b.daily_change || 0) - (a.daily_change || 0))
+        .slice(0, 5);
+
+      if (topByGrowth.length > 0) {
+        topByGrowth.forEach((account, index) => {
+          const changeEmoji = (account.daily_change || 0) > 0 ? '📈' : '📉';
+          console.log(`${index + 1}. ${changeEmoji} ${account.name} (@${account.twitter_handle})`);
+          console.log(`   ${account.daily_change > 0 ? '+' : ''}${account.daily_change} followers (${account.daily_change_percentage}%)`);
+        });
+      } else {
+        console.log('⚠️ No growth data available for today. Data will be available after the second sync.');
+      }
 
     } catch (error: any) {
       console.error('❌ Error showing overall stats:', error.message);
@@ -192,7 +212,7 @@ class FollowerGrowthAnalyticsManager {
   }
 
   /**
-   * Export growth data for a specific account to JSON
+   * Export growth data for a specific account to JSON (NEW SYSTEM)
    */
   async exportAccountGrowthData(accountId: string): Promise<void> {
     try {
@@ -206,7 +226,12 @@ class FollowerGrowthAnalyticsManager {
 
       console.log(`\n📤 Exporting growth data for: ${account.name}`);
       
-      const analytics = await this.followerService.getComprehensiveGrowthAnalytics(accountId);
+      const [dailySnapshots, weeklyGrowth, monthlyGrowth, yearlyGrowth] = await Promise.all([
+        this.followerService.getAccountDailySnapshots(accountId, 365), // Full year of daily data
+        this.followerService.getAccountGrowthOverDays(accountId, 7),
+        this.followerService.getAccountGrowthOverDays(accountId, 30),
+        this.followerService.getAccountGrowthOverDays(accountId, 365)
+      ]);
       
       const exportData = {
         account: {
@@ -216,7 +241,21 @@ class FollowerGrowthAnalyticsManager {
           current_followers: account.follower_count,
           export_date: new Date().toISOString()
         },
-        growth_analytics: analytics
+        growth_data: {
+          daily_snapshots: dailySnapshots,
+          period_growth: {
+            weekly: weeklyGrowth,
+            monthly: monthlyGrowth,
+            yearly: yearlyGrowth
+          }
+        },
+        summary: {
+          total_snapshots: dailySnapshots.length,
+          date_range: {
+            start: dailySnapshots.length > 0 ? dailySnapshots[dailySnapshots.length - 1].date : null,
+            end: dailySnapshots.length > 0 ? dailySnapshots[0].date : null
+          }
+        }
       };
 
       const fileName = `growth_data_${account.twitter_handle}_${new Date().toISOString().split('T')[0]}.json`;
@@ -266,15 +305,18 @@ async function main() {
 
     default:
       console.log(`
-🚀 Follower Growth Analytics Tool
+🚀 Follower Growth Analytics Tool (NEW SYSTEM)
+
+This system tracks daily follower snapshots starting from today.
+Growth is calculated dynamically over flexible time periods.
 
 Usage: npm run growth:analytics <command> [options]
 
 Commands:
   account [id]  - Show detailed growth analytics for an account
                   (if no ID provided, shows top account)
-  top          - Show top growing accounts by period
-  stats        - Show overall growth statistics
+  top          - Show top growing accounts by period (daily/weekly/monthly)
+  stats        - Show overall growth statistics across all accounts
   export <id>  - Export growth data for an account to JSON
 
 Examples:
@@ -284,8 +326,16 @@ Examples:
   npm run growth:analytics stats                     # Overall statistics
   npm run growth:analytics export uuid-here          # Export account data
 
-Note: Make sure you have run follower sync first:
-  npm run sync:followers initial
+Important Notes:
+- Growth tracking starts from today (first sync establishes baseline)
+- Daily growth data available after second sync (needs comparison point)
+- Weekly/monthly trends become more accurate over time
+- System automatically tracks growth with each follower sync
+
+To start collecting data:
+  1. Run: npm run sync:followers (to get current follower counts)
+  2. Wait 24 hours and run again (to see first growth data)
+  3. Analytics will show growth trends over time
       `);
       break;
   }

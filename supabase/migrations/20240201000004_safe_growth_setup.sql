@@ -1,8 +1,8 @@
--- Migration: Create dedicated growth metrics table and remove from accounts table
--- This creates a proper normalized structure for growth tracking
+-- Migration: Safe setup of growth metrics system (handles existing objects)
+-- This migration safely creates or updates all growth-related database objects
 
 -- =======================
--- 1. Create dedicated account_growth_metrics table
+-- 1. Ensure account_growth_metrics table exists with all columns
 -- =======================
 CREATE TABLE IF NOT EXISTS public.account_growth_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS public.account_growth_metrics (
   UNIQUE(account_id, period_type, period_start)
 );
 
--- Create indexes for optimal performance
+-- =======================
+-- 2. Create indexes safely (IF NOT EXISTS)
+-- =======================
 CREATE INDEX IF NOT EXISTS account_growth_metrics_account_id_idx ON public.account_growth_metrics(account_id);
 CREATE INDEX IF NOT EXISTS account_growth_metrics_period_type_idx ON public.account_growth_metrics(period_type);
 CREATE INDEX IF NOT EXISTS account_growth_metrics_period_start_idx ON public.account_growth_metrics(period_start DESC);
@@ -30,20 +32,10 @@ CREATE INDEX IF NOT EXISTS account_growth_metrics_growth_count_idx ON public.acc
 CREATE INDEX IF NOT EXISTS account_growth_metrics_composite_idx ON public.account_growth_metrics(account_id, period_type, period_start DESC);
 
 -- =======================
--- 2. Add comments for documentation
+-- 3. Create all functions (CREATE OR REPLACE handles existing functions)
 -- =======================
-COMMENT ON TABLE public.account_growth_metrics IS 'Stores calculated growth metrics for different time periods';
-COMMENT ON COLUMN public.account_growth_metrics.period_type IS 'Type of period: daily, weekly, monthly, yearly';
-COMMENT ON COLUMN public.account_growth_metrics.period_start IS 'Start date of the period';
-COMMENT ON COLUMN public.account_growth_metrics.period_end IS 'End date of the period';
-COMMENT ON COLUMN public.account_growth_metrics.start_followers IS 'Follower count at period start';
-COMMENT ON COLUMN public.account_growth_metrics.end_followers IS 'Follower count at period end';
-COMMENT ON COLUMN public.account_growth_metrics.growth_count IS 'Absolute growth (end - start)';
-COMMENT ON COLUMN public.account_growth_metrics.growth_percentage IS 'Percentage growth';
 
--- =======================
--- 3. Function to calculate growth for a specific period
--- =======================
+-- Function to calculate growth for a specific period
 CREATE OR REPLACE FUNCTION calculate_period_growth(
   p_account_id UUID,
   p_period_type TEXT,
@@ -97,9 +89,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =======================
--- 4. Function to upsert growth metrics for an account
--- =======================
+-- Function to upsert growth metrics for an account
 CREATE OR REPLACE FUNCTION upsert_account_growth_metrics(
   p_account_id UUID,
   p_period_type TEXT,
@@ -145,9 +135,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =======================
--- 5. Function to update all growth periods for an account
--- =======================
+-- Function to update all growth periods for an account (FIXED VERSION)
 CREATE OR REPLACE FUNCTION update_account_growth_periods(p_account_id UUID)
 RETURNS VOID AS $$
 DECLARE
@@ -203,7 +191,7 @@ BEGIN
 
   -- Also update previous completed periods
   -- Previous week (if it's a new week)
-  IF EXTRACT(DOW FROM current_date) = 1 AND week_start - INTERVAL '7 days' > '2024-01-01'::DATE THEN
+  IF EXTRACT(DOW FROM current_date) = 1 AND (week_start - INTERVAL '7 days')::DATE > '2024-01-01'::DATE THEN
     PERFORM upsert_account_growth_metrics(
       p_account_id,
       'weekly',
@@ -213,7 +201,7 @@ BEGIN
   END IF;
 
   -- Previous month (if it's a new month)
-  IF EXTRACT(DAY FROM current_date) = 1 AND month_start - INTERVAL '1 month' > '2024-01-01'::DATE THEN
+  IF EXTRACT(DAY FROM current_date) = 1 AND (month_start - INTERVAL '1 month')::DATE > '2024-01-01'::DATE THEN
     PERFORM upsert_account_growth_metrics(
       p_account_id,
       'monthly',
@@ -223,7 +211,7 @@ BEGIN
   END IF;
 
   -- Previous year (if it's a new year)
-  IF EXTRACT(DOY FROM current_date) = 1 AND year_start - INTERVAL '1 year' > '2024-01-01'::DATE THEN
+  IF EXTRACT(DOY FROM current_date) = 1 AND (year_start - INTERVAL '1 year')::DATE > '2024-01-01'::DATE THEN
     PERFORM upsert_account_growth_metrics(
       p_account_id,
       'yearly',
@@ -234,9 +222,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =======================
--- 6. Create trigger function to auto-update growth when follower history changes
--- =======================
+-- Create trigger function to auto-update growth when follower history changes
 CREATE OR REPLACE FUNCTION trigger_update_growth_on_follower_change()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -246,16 +232,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create the trigger
-DROP TRIGGER IF EXISTS trigger_follower_history_growth_update ON public.account_follower_history;
-CREATE TRIGGER trigger_follower_history_growth_update
-  AFTER INSERT OR UPDATE ON public.account_follower_history
-  FOR EACH ROW
-  EXECUTE FUNCTION trigger_update_growth_on_follower_change();
-
--- =======================
--- 7. Enhanced follower update function with automatic growth calculation
--- =======================
+-- Enhanced follower update function with automatic growth calculation
 CREATE OR REPLACE FUNCTION update_account_follower_count_with_auto_growth(
   p_account_id UUID,
   p_new_follower_count INTEGER
@@ -299,7 +276,16 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =======================
--- 8. Create view for easy access to latest growth metrics
+-- 4. Setup trigger safely
+-- =======================
+DROP TRIGGER IF EXISTS trigger_follower_history_growth_update ON public.account_follower_history;
+CREATE TRIGGER trigger_follower_history_growth_update
+  AFTER INSERT OR UPDATE ON public.account_follower_history
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_update_growth_on_follower_change();
+
+-- =======================
+-- 5. Create view safely
 -- =======================
 CREATE OR REPLACE VIEW account_latest_growth AS
 SELECT DISTINCT ON (agm.account_id, agm.period_type)
@@ -321,7 +307,7 @@ WHERE a.twitter_handle IS NOT NULL AND a.twitter_handle != ''
 ORDER BY agm.account_id, agm.period_type, agm.period_start DESC;
 
 -- =======================
--- 9. Add RLS policies (safe creation)
+-- 6. Setup RLS safely
 -- =======================
 ALTER TABLE public.account_growth_metrics ENABLE ROW LEVEL SECURITY;
 
@@ -349,13 +335,14 @@ CREATE POLICY "Allow update access to growth metrics" ON public.account_growth_m
   FOR UPDATE USING (true);
 
 -- =======================
--- 10. Grant permissions
+-- 7. Grant permissions safely
 -- =======================
 GRANT SELECT, INSERT, UPDATE ON public.account_growth_metrics TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.account_growth_metrics TO anon;
 GRANT SELECT ON account_latest_growth TO authenticated;
 GRANT SELECT ON account_latest_growth TO anon;
 
+-- Grant function permissions
 GRANT EXECUTE ON FUNCTION calculate_period_growth(UUID, TEXT, DATE, DATE) TO authenticated;
 GRANT EXECUTE ON FUNCTION upsert_account_growth_metrics(UUID, TEXT, DATE, DATE) TO authenticated;
 GRANT EXECUTE ON FUNCTION update_account_growth_periods(UUID) TO authenticated;
@@ -367,10 +354,10 @@ GRANT EXECUTE ON FUNCTION update_account_growth_periods(UUID) TO anon;
 GRANT EXECUTE ON FUNCTION update_account_follower_count_with_auto_growth(UUID, INTEGER) TO anon;
 
 -- =======================
--- 11. Add helpful comments
+-- 8. Add comments
 -- =======================
 COMMENT ON FUNCTION calculate_period_growth(UUID, TEXT, DATE, DATE) IS 'Calculates growth metrics for a specific period';
 COMMENT ON FUNCTION upsert_account_growth_metrics(UUID, TEXT, DATE, DATE) IS 'Updates or inserts growth metrics for a period';
-COMMENT ON FUNCTION update_account_growth_periods(UUID) IS 'Updates all current growth periods for an account';
+COMMENT ON FUNCTION update_account_growth_periods(UUID) IS 'Updates all current growth periods for an account (fixed)';
 COMMENT ON FUNCTION update_account_follower_count_with_auto_growth(UUID, INTEGER) IS 'Updates follower count and auto-calculates growth metrics';
 COMMENT ON VIEW account_latest_growth IS 'Latest growth metrics for each account and period type';
